@@ -8,6 +8,12 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
 build/
 develop-eggs/
 dist/
