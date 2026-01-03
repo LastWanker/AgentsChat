@@ -1,0 +1,173 @@
+policy:
+  name: IntentProposalPolicy
+  role: forward_proposal
+  audience: llm
+  description: >
+    This policy describes the kinds of intentions an Agent may consider.
+    It serves as a natural-language guide aligned with agent.py event APIs.
+    It does not enforce rules or determine legality.
+
+intentions:
+
+  speak:
+    event_type: speak
+    description: >
+      Speak is the most basic and frequent social action.
+      It produces a message visible within the current scope.
+    usage_guidance:
+      - Use to express thoughts, reasoning, questions, or partial ideas.
+      - Speak does not assume a target or require a response.
+      - It does not imply commitment or final judgement.
+    references_hint:
+      - References may be used to reply to, challenge, or extend previous events.
+      - Referencing helps establish conversational continuity.
+    common_patterns:
+      - discussion
+      - brainstorming
+      - clarification
+      - disagreement
+
+  speak_public:
+    event_type: speak_public
+    description: >
+      Speak_public is a forced public broadcast.
+      It legally bypasses the current scope and makes the message visible to all.
+    usage_guidance:
+      - Use when information must reach beyond the current group.
+      - Common for group leaders reporting progress to the public.
+      - May also be used in urgent or high-impact situations, even without authority.
+      - Using this action signals an intentional change of visibility.
+    references_hint:
+      - References may justify why escalation or public exposure is necessary.
+    common_patterns:
+      - cross-group escalation
+      - public reporting
+      - urgent warnings
+
+  request_specific:
+    event_type: request_specific
+    description: >
+      Request_specific is a public, directed request to a named agent.
+      It represents an explicit delegation or commission.
+    usage_guidance:
+      - Use when a particular agent is relevant or responsible.
+      - This action creates clear responsibility and traceability.
+      - Requests remain open until closed by a submit.
+    references_hint:
+      - References may explain why this agent was selected.
+    common_patterns:
+      - expert assignment
+      - task delegation
+      - accountable requests
+
+  request_anyone:
+    event_type: request_anyone
+    description: >
+      Request_anyone is a broadcast request without a specified recipient.
+      It invites voluntary response or assistance.
+    usage_guidance:
+      - Use when unsure who can help or when participation is optional.
+      - Does not require completion, but allows later adoption.
+      - Often used as a lightweight call for help.
+    references_hint:
+      - References may indicate what triggered the need for help.
+    common_patterns:
+      - open help request
+      - voluntary task claiming
+      - assistance solicitation
+
+  request_all:
+    event_type: request_all
+    description: >
+      Request_all initiates a collective decision or rule-governed process.
+      It is addressed to all relevant agents.
+    usage_guidance:
+      - Use to respond to a request event.
+      - Submit implies fulfillment, not discussion.
+      - Visibility may vary depending on delivery context.
+      - When responding to request_all, submit represents an individual vote or decision input.
+        Collective outcomes typically depend on multiple submit events.
+
+    references_hint:
+      - References may define the context or prior discussion leading to the decision.
+    common_patterns:
+      - voting
+      - consensus building
+      - collective rule declaration
+
+  submit:
+    event_type: submit
+    description: >
+      Submit represents delivery or completion of a request.
+      It formally closes a request-related process.
+    usage_guidance:
+      - Use to respond to a request event.
+      - Submit implies fulfillment, not discussion.
+      - Visibility may vary depending on delivery context.
+    references_hint:
+      - A submit normally references the request it fulfills.
+    common_patterns:
+      - task completion
+      - decision closure
+      - result delivery
+
+  evaluation:
+    event_type: evaluation
+    description: >
+      Evaluation expresses an assessment or judgement of prior events.
+      It carries implicit attitude or stance.
+    usage_guidance:
+      - Use to provide qualitative feedback or reflection.
+      - Evaluation affects interpretation and attribution.
+      - It is not merely descriptive speech.
+    references_hint:
+      - Referencing indicates what is being evaluated.
+      - References may carry inherited weight.
+    common_patterns:
+      - peer review
+      - reflective judgement
+      - performance assessment
+
+  state_change:
+    event_type: state_change
+    description: >
+      State_change is a declarative announcement of a status change.
+      It represents an intention to alter recognized state.
+    usage_guidance:
+      - Use to declare availability, inability, refusal, or role-related status.
+      - This action is explicit and traceable.
+    references_hint:
+      - References may justify or contextualize the state change.
+    common_patterns:
+      - availability declaration
+      - refusal
+      - role transition
+
+  join_group:
+    event_type: join_group
+    description: >
+      Join_group declares intent to enter a group context.
+      It separates public declaration from actual state transition.
+    usage_guidance:
+      - Use to announce willingness to participate in a group.
+      - Group membership is typically determined through a prior collective decision.
+      - Joining often follows a request_all process that establishes group formation.
+    references_hint:
+      - References may indicate invitation or approval.
+    common_patterns:
+      - team formation
+      - role onboarding
+
+  leave_group:
+    event_type: leave_group
+    description: >
+      Leave_group declares intent to exit a group context.
+      It does not imply task completion.
+    usage_guidance:
+      - Use to signal withdrawal or disengagement.
+      - Follow-up communication may be expected.
+    references_hint:
+      - References may explain reasons for departure.
+    common_patterns:
+      - disengagement
+      - role exit

@@ -1,0 +1,257 @@
+version: 0.1
+policy:
+  name: IntentConstraintPolicy
+  role: forward_constraint
+  audience: system
+
+kinds:
+
+  join_group:
+    allow: true
+
+    require:
+      references:
+        event_types:
+          - request_all
+
+    forbid:
+      - intention.completed == true
+
+
+  leave_group:
+    allow: true
+
+
+  submit:
+    allow: true
+
+    require:
+      references:
+        event_types:
+          - request_specific
+          - request_anyone
+          - request_all
+
+    forbid:
+      - referenced_event.scope != public AND agent.scope != referenced_event.scope
+
+
+  request_specific:
+    allow: true
+
+    forbid:
+      - intention.scope != public
+
+
+  request_all:
+    allow: true
+
+    forbid:
+      - intention.completed == true
+
+
+  evaluation:
+    allow: true
+
+    require:
+      references:
+        min: 1
+
+
+  speak_public:
+    allow: true
+
+    forbid:
+      - intention.references.is_empty == true
+      - intention.urgency < escalation_threshold
+
+
+  state_change:
+    allow: true
+
+    forbid:
+      - intention.completed == true
+
+
+
+#policy:
+#  name: IntentConstraintPolicy
+#  role: forward_constraint
+#  audience: system
+#  description: >
+#    Enforces non-negotiable constraints on intentions before they are
+#    translated into events. This policy is authoritative and mechanical.
+#    It does not guide, explain, or evaluate intent quality.
+#
+#rules:
+#
+#  # ------------------------------------------------
+#  # Structural constraints: group and scope
+#  # ------------------------------------------------
+#
+#  - id: C-JOIN-1
+#    name: Join group requires group-allocation reference
+#    applies_to: join_group
+#    when:
+#      - not referenced_event_type_includes: request_all
+#    then:
+#      action: suppressed
+#      tags:
+#        - missing_group_allocation
+#    note: >
+#      Join_group represents assignment into a generated group scope.
+#      It must reference a request_all that defines group formation.
+#
+#  - id: C-JOIN-2
+#    name: Join group cannot self-complete
+#    applies_to: join_group
+#    when:
+#      - intention.completed == true
+#    then:
+#      action: rewrite
+#      rewrite:
+#        completed: false
+#    tags:
+#      - declarative_join
+#    note: >
+#      Group assignment is declarative.
+#      Completion is determined by downstream allocation logic.
+#
+#  # ------------------------------------------------
+#  # Leave group constraints
+#  # ------------------------------------------------
+#
+#  - id: C-LEAVE-1
+#    name: Leave group is always allowed
+#    applies_to: leave_group
+#    when: []
+#    then:
+#      action: allow
+#    note: >
+#      Leaving a group is an individual action.
+#      It does not require authorization or reference.
+#
+#  # ------------------------------------------------
+#  # Submit constraints
+#  # ------------------------------------------------
+#
+#  - id: C-SUBMIT-1
+#    name: Submit must reference a request event
+#    applies_to: submit
+#    when:
+#      - not referenced_event_type_matches: request_*
+#    then:
+#      action: suppressed
+#      tags:
+#        - submit_without_request
+#    note: >
+#      Submit represents a response within a request-driven process.
+#      Its semantic anchor must be a request event.
+#
+#  # ------------------------------------------------
+#  # Collective decision participation constraints
+#  # ------------------------------------------------
+#
+#  - id: C-VOTE-1
+#    name: Prevent unrelated agents from group-scoped collective decisions
+#    applies_to: submit
+#    when:
+#      - referenced_event_type_is: request_all
+#      - referenced_event.scope != public
+#      - agent.scope != referenced_event.scope
+#    then:
+#      action: suppressed
+#      tags:
+#        - out_of_scope_vote
+#    note: >
+#      Collective decisions tied to a specific group
+#      only accept submissions from agents within that group.
+#
+#  # ------------------------------------------------
+#  # Request constraints
+#  # ------------------------------------------------
+#
+#  - id: C-REQ-1
+#    name: Directed requests must be public
+#    applies_to: request_specific
+#    when:
+#      - intention.scope != public
+#    then:
+#      action: rewrite
+#      rewrite:
+#        scope: public
+#    tags:
+#      - forced_public_request
+#    note: >
+#      Directed requests are inherently public delegations
+#      and must be visible for accountability.
+#
+#  - id: C-REQ-2
+#    name: Collective requests cannot self-complete
+#    applies_to: request_all
+#    when:
+#      - intention.completed == true
+#    then:
+#      action: rewrite
+#      rewrite:
+#        completed: false
+#    tags:
+#      - collective_process
+#    note: >
+#      Collective decisions require multiple submissions
+#      and cannot be completed by declaration.
+#
+#  # ------------------------------------------------
+#  # Evaluation constraints
+#  # ------------------------------------------------
+#
+#  - id: C-EVAL-1
+#    name: Evaluation must reference a target
+#    applies_to: evaluation
+#    when:
+#      - intention.references.is_empty == true
+#    then:
+#      action: suppressed
+#      tags:
+#        - evaluation_without_target
+#    note: >
+#      Evaluation without a referenced target
+#      has no semantic anchor.
+#
+#  # ------------------------------------------------
+#  # Public escalation constraints
+#  # ------------------------------------------------
+#
+#  - id: C-PUBLIC-1
+#    name: Unjustified public escalation is downgraded
+#    applies_to: speak_public
+#    when:
+#      - intention.references.is_empty == true
+#      - intention.urgency < escalation_threshold
+#    then:
+#      action: downgrade
+#      downgrade_to: speak
+#    tags:
+#      - unjustified_public_escalation
+#    note: >
+#      Public escalation without urgency or contextual reference
+#      is downgraded to scoped speech.
+#
+#  # ------------------------------------------------
+#  # State change constraints
+#  # ------------------------------------------------
+#
+#  - id: C-STATE-1
+#    name: State change is declarative only
+#    applies_to: state_change
+#    when:
+#      - intention.completed == true
+#    then:
+#      action: rewrite
+#      rewrite:
+#        completed: false
+#    tags:
+#      - declarative_state
+#    note: >
+#      State changes are declarations, not immediate facts.
+#      Confirmation or effect is handled downstream.
