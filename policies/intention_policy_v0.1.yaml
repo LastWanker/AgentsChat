@@ -1,0 +1,185 @@
+# ============================================
+# AgentsChat Policy v0.1
+# 类型：指导性规则（非可执行代码）
+# 定位：机械裁判的判例集
+# ============================================
+
+meta:
+  name: AgentsChat Policy
+  version: 0.1
+  scope: intention_and_event
+  visibility:
+    to_agents:
+      # Agent 可被明确告知的只有“能力边界”
+      - forbidden_intention_kinds
+    hidden_from_agents:
+      # 所有评判标准与阈值均不透明
+      - thresholds
+      - risk_rules
+      - tagging_rules
+
+principles:
+  - id: P-0.1
+    name: 裁判不可见性原则
+    description: >
+      Agent 不应知晓具体 policy 条款。
+      系统避免引导 Agent 进行策略性合规表演。
+  - id: P-0.2
+    name: 不回溯原则
+    description: >
+      Policy 不修改已发生的 Event，只做标记与记录。
+  - id: P-0.3
+    name: 标记优先于处罚
+    description: >
+      Policy 不直接惩罚 Agent，不调整 priority，仅生成标签与风险记录。
+
+# ------------------------------------------------
+# Intention 级 Policy
+# ------------------------------------------------
+intention_policies:
+
+  - id: P-1
+    name: 未承认影响（Unacknowledged Influence）
+    when:
+      - intention.trigger.event_id exists
+      - event.references does_not_contain intention.trigger.event_id
+    then:
+      tags:
+        - unacknowledged_influence
+      agent_record:
+        risk_log: +1
+    note: >
+      表示该行为受到某事件触发，
+      但在公开行为中未承认这种影响。
+      不强制补 reference，仅记录。
+
+  - id: P-2
+    name: Intention 不完整性检查
+    when:
+      - intention.missing is_not_empty
+    then:
+      if:
+        critical_fields_missing:
+          action: pending
+        expired:
+          action: expired
+          tags:
+            - incomplete_intention
+    note: >
+      missing 表示尚未具备生成合法 Event 的条件，
+      属于健康的不确定性，而非错误。
+
+  - id: P-3
+    name: 禁止非法 Intention 类型
+    forbidden_kinds:
+      - state_change
+      - join_group
+      - leave_group
+    then:
+      action: suppressed
+      tags:
+        - forbidden_intention_kind
+    visibility:
+      to_agents: true
+    note: >
+      这些行为属于“声明即事实”或“结构性结果”，
+      不允许以“我想但没做”的形式存在。
+      此规则应告知 Agent，作为能力边界。
+
+# ------------------------------------------------
+# Request 相关 Policy
+# ------------------------------------------------
+request_policies:
+
+  - id: P-4
+    name: Request 动机分段裁决
+    applies_to: request_*
+    thresholds:
+      suppress: 0.1
+      tentative: 0.3
+    rules:
+      - when: motivation < 0.1
+        then:
+          action: suppressed
+          tags:
+            - low_motivation_request
+
+      - when: motivation >= 0.1 and motivation < 0.3
+        then:
+          action: allow_emit
+          payload_modification:
+            level: tentative
+            description: >
+              payload 指的是 request 的内容草案，
+              在此阶段应简化为“是否可行 / 是否有人愿意”，
+              不应包含完整任务细节。
+          tags:
+            - tentative_request
+
+      - when: motivation >= 0.3
+        then:
+          action: allow_emit
+
+  - id: P-5
+    name: Request 闭合规则
+    rule: >
+      只有 submit(reference=request_id)
+      才能将 request.completed 标记为 true。
+    note: >
+      其他 Event（如 speak / evaluation）引用 request，
+      只建立关系，不闭合流程。
+
+# ------------------------------------------------
+# Evaluation 相关 Policy
+# ------------------------------------------------
+evaluation_policies:
+
+  - id: P-6
+    name: Evaluation Intention 内容限制
+    applies_to: evaluation
+    forbidden_fields_in_payload:
+      - score
+      - weight
+    then:
+      action: suppressed
+      tags:
+        - premature_judgement
+    note: >
+      score / weight 属于“社会态度的最终声明”，
+      会直接进入事件图并影响归因计算。
+      在 Intention 阶段禁止出现，
+      以防止未授权的隐性评价。
+
+# ------------------------------------------------
+# Speak / Speak_public Policy
+# ------------------------------------------------
+speak_policies:
+
+  - id: P-7
+    name: Public Speak 谨慎原则
+    applies_to: speak_public
+    when:
+      - motivation < public_motivation_threshold
+      - confidence < public_confidence_threshold
+    then:
+      action: downgrade_to_speak
+      tags:
+        - public_downgraded
+    note: >
+      当 Agent 动机或信心不足时，
+      系统倾向于引导其先在小范围讨论，
+      以减少公共域噪声。
+
+# ------------------------------------------------
+# Agent 级记录规则
+# ------------------------------------------------
+agent_policies:
+
+  - id: P-8
+    name: 风险记录累积规则
+    rule: >
+      policy_tag 与 risk_flag 仅用于记录与分析，
+      不直接影响 agent.priority 或执行权限。
+    note: >
+      priority 属于慢变量，
+      应由后处理或训练阶段统一调整。

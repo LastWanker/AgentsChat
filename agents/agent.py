@@ -227,6 +227,26 @@ class Agent:
         }
 
     # ---------- 基础工具 ----------
+    # Agent.memory 的唯一写入口，是 observe()
+    def observe(self, event: dict):
+        """
+        Agent 看见一个世界事件
+        当前版本：只记录，不行动
+        """
+        self.memory.append({
+            "seen_event": event["event_id"]
+        })
+        # 现在，要验证的是因果方向是否正确，不是 schema↑ 是否优雅。
+        # 当前这个：{"seen_event": event_id}完全够用，而且它有一个优点：简陋到不可能被误用为事实
+        # 未来我们会真正设计scheme格式，例如下面↓。
+        """
+                {
+          "type": "seen_event",
+          "event_id": "...",
+          "from": "...",
+          "timestamp": ...
+        }
+        """
 
     def _new_event(  # “_”表示：这是 Agent 的内部工具，外部不应该直接调用
             self,
@@ -259,8 +279,9 @@ class Agent:
 
             "completed": completed,
         }
-        # Agent 只负责“我做过什么”，不负责“全局发生了什么”。
-        self.memory.append(event["event_id"])
+
+        # Agent 只负责“我做过什么”，不负责“全局发生了什么”。 # 新的变更！统一 memory 的写入口：只允许 observe 写
+        # self.memory.append(event["event_id"])  # 写法淘汰。统一 memory 的写入口：只允许 observe 写，详见上面的observe类
 
         return event
 
