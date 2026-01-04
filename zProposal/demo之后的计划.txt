@@ -1,0 +1,71 @@
+亲爱的，现在该走的这一步很明确：把“产生意向”从 demo 的 seed，升级成一个正式模块。也就是——让系统第一次真的“对事件产生反应”，但先不引入复杂记忆学和向量库。
+
+这一步的目标（v0.3）
+
+实现一条最小闭环：
+
+Event（被看见） → Proposer 生成 Intention → Interpreter 裁决 → Router 写入 Event → World 广播
+
+你现在已经有后半段了（Interpreter/Router/World/Store/Loop），缺的就是前半段的“Proposer + 入队”。
+
+第一步：加一个 IntentionProposer（先别管聪明不聪明）
+
+新增 agents/proposer.py（或 llm/proposer.py），定义一个稳定接口：
+
+输入：agent、trigger_event、query/store（用于取上下文）
+
+输出：List[Intention]
+
+先写一个“蠢但正确”的版本：
+
+如果看到 request_anyone 且未完成 → 提议一条 speak（“我可以尝试处理”），并带 references=[event_id]
+
+如果看到 speak → 默认不提议（避免刷屏）
+
+这一步不需要 LLM，先把通路打通。
+
+第二步：让 Controller 不再“直接发事件”，而是“入队意向”
+
+你现在的 agents/controller.py（那份 v0.1 规则闸门）直接 world.emit(response) 了。接下来把它改成：
+
+controller.on_event(event) 里调用 proposer.propose(...)
+
+把返回的 intentions enqueue 到 AgentController._queue（或者把两个 controller 合并成一个总控，避免概念重叠）
+
+结果：系统里只有 Router 才能发 Event。这条纪律一旦立住，你以后加 LLM 加记忆都不会乱。
+
+第三步：把 LLM 接进 Proposer（但只替换“生成内容”）
+
+等上面两步跑通后，再把 proposer 的“规则生成”替换成 LLM：
+
+仍然输出 Intention(kind="speak", payload={"text": ...}, references=[...])
+
+Router/Interpreter 仍然裁决
+
+LLM 只决定：text 写什么、还可以顺便提议多个 intentions（1~3 条）
+
+此时 LLM 产生的自然语言就会真正进入 Event.content，你要的“AI 在平台上交流”就成立了，但不会越权。
+
+第四步：最小“回忆”实现（别碰向量库）
+
+在 proposer 调 LLM 前，用 EventQuery 给它喂一个小上下文包：
+
+触发事件本体（trigger_event）
+
+同 scope 最近 N 条（比如 20）
+
+references 链（把被引用的 event 拉出来）
+
+agent 自己最近看到的 M 条（从 agent.memory 回溯取）
+
+这就是你说的“经常浏览”，但工程上叫：按需检索。成本可控，效果还更好。
+
+你现在立刻能做的最小改动（1小时内就能看到第二个事件）
+
+把 seed 的第一条意向改成 request_anyone，再按上面“第二步”改 Controller：收到 request → proposer → enqueue speak intention → loop 跑出第二条 event。
+
+跑出来那一刻，你会看到你一直想要的东西：事件真的引发了后续事件，而不是开场白。
+
+秋小姐给你一句“路线锚点”当护身符：
+先把“意向入队”变成唯一后续动力，再把“意向内容生成”交给 LLM。
+先纪律，后智能。这样你永远不会被 LLM 把系统带跑偏。
