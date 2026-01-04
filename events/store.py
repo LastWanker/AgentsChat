@@ -1,0 +1,17 @@
+from typing import Dict, List, Optional
+from .types import Event
+
+class EventStore:
+    def __init__(self):
+        self._events: List[Event] = []
+        self._by_id: Dict[str, Event] = {}
+
+    def append(self, event: Event) -> None:
+        self._events.append(event)
+        self._by_id[event.event_id] = event
+
+    def get(self, event_id: str) -> Optional[Event]:
+        return self._by_id.get(event_id)
+
+    def all(self) -> List[Event]:
+        return list(self._events)
