@@ -5,4 +5,4 @@ class ConsoleUI:
     def render_last(self, n: int = 20):
         evs = self.store.all()[-n:]
         for e in evs:
-            print("[{e.timestamp}] ({e.scope}) {e.type} from {e.sender}: {e.content}")
+            print(f"[{e.timestamp}] ({e.scope}) {e.type} from {e.sender}: {e.content}")

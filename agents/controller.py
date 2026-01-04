@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 from uuid import uuid4
 from events.types import Intention
 
@@ -17,7 +17,7 @@ class AgentController:
             intention_id=str(uuid4()),
             agent_id=a.id,
             kind="speak",
-            payload={"text": "我是 {a.name}，系统开始跑了。"},
+            payload={"text": f"我是 {a.name}，系统开始跑了。"},
             scope=a.scope,
             references=[],
             completed=True,
@@ -28,7 +28,7 @@ class AgentController:
     def pending(self) -> List[Intention]:
         return [x for x in self._queue if x.status == "pending"]
 
-    def pop_one(self) -> Optional[Intention]:
+    def pop_one(self) -> Intention | None:
         for x in self._queue:
             if x.status == "pending":
                 return x

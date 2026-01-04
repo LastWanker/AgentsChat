@@ -2,6 +2,8 @@ from typing import Optional
 from events.types import Intention, Decision, new_event, Event
 from events.store import EventStore
 
+
+
 class Router:
     """
     把 approved 的 intention 定型为 Event，然后交给 World/Store。
