@@ -16,3 +16,10 @@ priority（优先级）：纠错/答复 request > 讨论闲聊
 其中疑似要用到controller的内容：
     agent_id=context.agent_id,  # 这里要从 Controller 传进来
 proposer采用了无llm自动降级的操作，不知道是否可靠。
+
+三、policy缺了俩。
+最开始设计，其实有四类“policy / intention”
+① 前向 · 生成型（Generative / Propositional） LLM用
+② 前向 · 约束型（Pre-action Constraint） Controller（在真正 emit event 之前）用
+③ 后向 · 分类型（Post-hoc Intention Attribution） Interpreter / Analyzer用 “这个已发生的行为，在制度与分析视角下，算哪一类 intention？”
+④ 后向 · 规范评价型（Normative / Ethical / Risk） 分析系统、人、报告模块、训练阶段用 “这个行为好不好？风险高不高？值不值得奖励？”
