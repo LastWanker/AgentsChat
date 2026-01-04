@@ -1,5 +1,6 @@
 from events.types import Decision
 
+
 class IntentConstraintPolicy:
     def __init__(self, interpreter):
         self.interpreter = interpreter

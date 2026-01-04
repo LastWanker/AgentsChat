@@ -36,15 +36,14 @@ class IntentInterpreter:
     """
 
     def __init__(self, constraint_path: str):
+        # with open(constraint_path, "r", encoding="utf-8") as f:
+        #     self.policy = yaml.safe_load(f) or {}
         if yaml is None:
             # 没有 PyYAML 时，退化为空策略（全部 approved）
             self.policy = {}
         else:
             with open(constraint_path, "r", encoding="utf-8") as f:
                 self.policy = yaml.safe_load(f) or {}
-
-        # with open(constraint_path, "r", encoding="utf-8") as f:
-        #     self.policy = yaml.safe_load(f) or {}
 
         self.kinds = self.policy.get("kinds", {}) or {}
 
@@ -70,8 +69,10 @@ class IntentInterpreter:
             if not self.kinds:
                 return self._decision("approved", [])
             return self._decision(
-                "suppressed",
-                [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
+                # "suppressed",
+                # [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
+                "approved",
+                [{"kind": "warn", "rule": f"unknown kind {kind}", "detail": kind}],
             )
 
         violations: List[Dict[str, str]] = []
