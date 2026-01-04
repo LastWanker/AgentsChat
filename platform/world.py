@@ -1,12 +1,13 @@
 # platform/world.py
-from typing import List, Dict, Any
-# v0.2
+from dataclasses import asdict, is_dataclass
+from typing import List, Dict, Any, Optional
 
 
 class World:
     def __init__(self):
         # 世界的时间线
         self.events: List[Dict[str, Any]] = []
+        self._by_id: Dict[str, Dict[str, Any]] = {}
 
         # 所有观察者（Agent / UI / Logger 都算）
         self.observers: List[Any] = []
@@ -42,11 +43,29 @@ class World:
         """
         世界接收一个已经发生的事件
         """
+        event_dict = self._to_dict(event)
+
         # 1. 记录历史（事实不可更改）
-        self.events.append(event)
+        # self.events.append(event)
+        self.events.append(event_dict)
+        if event_id := event_dict.get("event_id"):
+            self._by_id[event_id] = event_dict
 
         # 2. 按可见性通知观察者
         for observer in self.observers:
-            if self._is_visible(event, observer):
-                observer.on_event(event)
+            # if self._is_visible(event, observer):
+            #     observer.on_event(event)
+            if self._is_visible(event_dict, observer):
+                observer.on_event(event_dict)
 
+    # ---------- 查询 ----------
+    def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
+        return self._by_id.get(event_id)
+
+    # ---------- 工具 ----------
+    def _to_dict(self, event: Any) -> Dict[str, Any]:
+        if is_dataclass(event):
+            return asdict(event)
+        if isinstance(event, dict):
+            return event
+        return getattr(event, "__dict__", {}) or {}
