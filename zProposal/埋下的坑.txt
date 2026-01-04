@@ -1,0 +1,18 @@
+一、暂时”看到speak / speak_public的时候：默认不提议（防刷屏）
+
+在 还没把节流/去重/轮次预算 这些机制钉死之前，让 “speak → proposer 再提议 speak → 再触发 speak ……” 这条链条自由生长，系统会变成：
+任何一句话都会引发多人回应
+回应又引发更多回应
+你 demo 里最先看到的“生命迹象”，会是“刷屏”。
+所以 v0.3 的临时策略是：只对 request_anyone / request_specific 这种“明确需要回应”的事件提议，先把闭环跑稳、把纪律跑稳。等 v0.31/v0.32 你加上这些东西以后，再放开对 speak 的提议：
+cooldown（冷却）：同一 agent 对同一 scope 多久内最多提议一次 speak
+dedupe（去重）：相同 references + 相似 intent 直接不提议
+budget（预算）：每个 event 最多允许多少条 intentions 入队
+priority（优先级）：纠错/答复 request > 讨论闲聊
+你现在的直觉：“最终当然应该能接话/批评/讨论”完全正确，只是我们要先别让它变成永动机。
+
+二、proposer
+
+其中疑似要用到controller的内容：
+    agent_id=context.agent_id,  # 这里要从 Controller 传进来
+proposer采用了无llm自动降级的操作，不知道是否可靠。
