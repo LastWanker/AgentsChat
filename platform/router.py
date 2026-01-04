@@ -14,16 +14,26 @@ class Router:
         self.interpreter = interpreter
 
     def handle_intention(self, intention: Intention, agent) -> Decision:
+        print(
+            f"[platform/router.py] 📨 收到 {agent.name} 的意向 {intention.intention_id}，先让解释器看看。"
+        )
         decision: Decision = self.interpreter.interpret_intention(intention, agent, self.world, self.store)
         if decision.status != "approved":
+            print(
+                f"[platform/router.py] 🚫 意向 {intention.intention_id} 没过审，状态是 {decision.status}，先压下去。"
+            )
             intention.status = "suppressed"
             return decision
 
         event = self._intention_to_event(intention, agent)
+        print(
+            f"[platform/router.py] ✅ 意向 {intention.intention_id} 通过，转换成事件 {event.event_id}，准备广播。"
+        )
         self.store.append(event)
         # self.world.emit(event.__dict__)  # 兼容你现有 World.emit(dict)
         self.world.emit(event)
         intention.status = "executed"
+        print(f"[platform/router.py] 📣 事件 {event.event_id} 已送入世界，大家随意围观。")
         return decision
 
     def _intention_to_event(self, intention: Intention, agent) -> Event:
