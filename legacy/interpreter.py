@@ -1,13 +1,24 @@
-# interpreter.py
-from typing import Dict, Any, List
+"""
+legacy/interpreter.py
+
+早期版本的解释器（v0.1），接口与语义均已被 agents/interpreter.py::IntentInterpreter 取代。
+保留此实现仅供测试或历史对比，Router 与正式逻辑禁止引用。
+"""
+
+from typing import Any, Dict, List
 import yaml
 
 
 class InterpretationError(Exception):
-    pass
+    """与旧版保持兼容的异常类型。"""
 
 
-class Interpreter:
+class LegacyInterpreter:
+    """
+    v0.1 的 Interpreter：直接返回批准/压制结果，不支持约束/可供性升级。
+
+    ⚠️ legacy 组件，仅用于测试验证，其他模块请统一使用 IntentInterpreter。
+    """
     def __init__(self, constraint_path: str = "intent_constraint.yaml"):
         with open(constraint_path, "r", encoding="utf-8") as f:
             self.policy = yaml.safe_load(f)
@@ -19,10 +30,7 @@ class Interpreter:
         kind = intention.get("kind")
 
         if kind not in self.kinds:
-            return self._suppress(
-                "forbid",
-                f"Unknown intention kind: {kind}"
-            )
+            return self._suppress("forbid", f"Unknown intention kind: {kind}")
 
         ruleset = self.kinds[kind]
         violations: List[Dict[str, str]] = []
@@ -36,15 +44,9 @@ class Interpreter:
             violations.append(violation)
 
         if violations:
-            return {
-                "status": "suppressed",
-                "violations": violations
-            }
+            return {"status": "suppressed", "violations": violations}
 
-        return {
-            "status": "approved",
-            "violations": []
-        }
+        return {"status": "approved", "violations": []}
 
     # ---------- require ----------
     def _check_require(self, require, intention, agent, world):
@@ -60,7 +62,7 @@ class Interpreter:
                 violations.append({
                     "kind": "require",
                     "rule": f"missing field {field}",
-                    "detail": field
+                    "detail": field,
                 })
 
         # require.references
@@ -68,11 +70,7 @@ class Interpreter:
         if ref_req:
             refs = intention.get("references", [])
             if not refs:
-                violations.append({
-                    "kind": "require",
-                    "rule": "missing references",
-                    "detail": "references"
-                })
+                violations.append({"kind": "require", "rule": "missing references", "detail": "references"})
             else:
                 types = ref_req.get("event_types", [])
                 if types:
@@ -80,7 +78,7 @@ class Interpreter:
                         violations.append({
                             "kind": "require",
                             "rule": "reference type mismatch",
-                            "detail": str(types)
+                            "detail": str(types),
                         })
 
         return violations
@@ -94,11 +92,7 @@ class Interpreter:
 
         for expr in forbid:
             if self._eval_expr(expr, intention, agent, world):
-                violations.append({
-                    "kind": "forbid",
-                    "rule": expr,
-                    "detail": "expression matched"
-                })
+                violations.append({"kind": "forbid", "rule": expr, "detail": "expression matched"})
 
         return violations
 
@@ -121,7 +115,7 @@ class Interpreter:
 
     def _eval_expr(self, expr: str, intention, agent, world) -> bool:
         """
-        极简表达式执行器（v0）
+        极简表达式执行器（v0）。
         expr 示例：
           intention.completed == true
           intention.scope != public
@@ -133,7 +127,7 @@ class Interpreter:
             "world": world,
             "true": True,
             "false": False,
-            "public": "public"
+            "public": "public",
         }
 
         try:
@@ -143,13 +137,4 @@ class Interpreter:
             return False
 
     def _suppress(self, kind, reason):
-        return {
-            "status": "suppressed",
-            "violations": [
-                {
-                    "kind": kind,
-                    "rule": reason,
-                    "detail": ""
-                }
-            ]
-        }
+        return {"status": "suppressed", "violations": [{"kind": kind, "rule": reason, "detail": ""}]}

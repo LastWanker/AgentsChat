@@ -1,14 +1,15 @@
-from typing import Optional
 from events.types import Intention, Decision, new_event, Event
 from events.store import EventStore
+from agents.interpreter import IntentInterpreter
 
 
 class Router:
     """
     把 approved 的 intention 定型为 Event，然后交给 World/Store。
     这里不做智能推理，只做翻译与投递。
+    解释器入口唯一：只接受 agents/interpreter.py 的 IntentInterpreter。
     """
-    def __init__(self, world, store: EventStore, interpreter):
+    def __init__(self, world, store: EventStore, interpreter: IntentInterpreter):
         self.world = world
         self.store = store
         self.interpreter = interpreter

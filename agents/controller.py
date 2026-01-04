@@ -2,9 +2,10 @@ from typing import List
 from uuid import uuid4
 from events.types import Intention
 
+
 class AgentController:
     """
-    v0：先别上 LLM。用“脚本式意向”跑通闭环。
+    只负责观察 -> 产生意向 -> 入队，绝不直接向 World emit 事件。
     """
     def __init__(self, agents: List):
         self.agents = agents

@@ -1,25 +1,17 @@
-# agents/controller.py
-# 最后一次修改时间：2026-01-04
 """
-Controller 的定位（v0.1）：
-
-Controller 不是智能体，
-不是策略引擎，
-不是世界本身。
-
-它的唯一职责是：
-    在“某个 Event 已经发生”之后，
-    决定：
-        是否允许、以及由谁，
-        触发下一个 Event。
-
-Controller 是因果的闸门，而不是思考的源头。
+legacy/controller.py
+只为兼容早期（v0.1）直接 world.emit 的控制器逻辑，
+请仅在测试或回归对比中使用，正式代码请用 agents/controller.py::AgentController。
 """
+from typing import Any, Callable, Dict, List
 
-from typing import List, Dict, Any, Callable, Optional
 
+class LegacyController:
+    """
+    v0.1 的 Controller：观察事件后直接向 World 发 event。
 
-class Controller:
+    ⚠️ 此类保留在 legacy，仅供测试验证旧行为，不应被生产代码引用。
+    """
     def __init__(self, world, agents: List[Any]):
         """
         world:
@@ -52,9 +44,7 @@ class Controller:
     # ---------- 规则注册 ----------
 
     def _register_default_handlers(self):
-        """
-        v0.1 阶段的最小规则集
-        """
+        """v0.1 阶段的最小规则集。"""
         self.handlers = {
             "request_anyone": self._handle_request_anyone,
             # 后续会加：
@@ -87,6 +77,7 @@ class Controller:
             references=[event["event_id"]],
         )
 
+        # 旧路线：直接 emit 到世界
         self.world.emit(response)
 
     # ---------- 选择逻辑（极简） ----------
@@ -102,10 +93,7 @@ class Controller:
 
         sender_id = event.get("sender")
 
-        candidates = [
-            agent for agent in self.agents.values()
-            if agent.id != sender_id
-        ]
+        candidates = [agent for agent in self.agents.values() if agent.id != sender_id]
 
         if not candidates:
             return None
