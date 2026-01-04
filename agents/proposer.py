@@ -92,7 +92,8 @@ class IntentionProposer:
         event = context.trigger_event
         etype = event.get("type")
         event_id = event.get("event_id")
-        payload = event.get("payload") or {}
+        # payload = event.get("payload") or {}
+        payload = event.get("payload") or event.get("content") or {}
 
         refs = [event_id] if event_id else []
 
@@ -165,7 +166,6 @@ class IntentionProposer:
         return intentions
 
     # ---------- dumb 文本生成 ----------
-
     def _simple_request_reply(self, request: Optional[str]) -> str:
         if request:
             return f"我可以试着处理一下：{request}"
