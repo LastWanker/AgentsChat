@@ -6,17 +6,21 @@ from datetime import datetime, UTC
 
 Scope = str  # "public" or "group:<id>"
 
+
 @dataclass
 class Intention:
     intention_id: str
     agent_id: str
-    kind: str                    # speak / submit / ...
-    payload: Dict[str, Any]      # draft content
+    kind: str  # speak / submit / ...
+    payload: Dict[str, Any]  # draft content
     scope: Scope = "public"
     references: List[str] = field(default_factory=list)
     completed: bool = True
     urgency: float = 0.0
-    status: Literal["pending","suppressed","approved","executed"] = "pending"
+    status: Literal["pending", "suppressed", "approved", "executed"] = "pending"
+    deferred_until_tick: Optional[int] = None
+    deferred_until_time: Optional[float] = None
+
 
 @dataclass
 class Event:
@@ -31,10 +35,12 @@ class Event:
     metadata: Dict[str, Any] = field(default_factory=dict)
     completed: bool = True
 
+
 @dataclass
 class Decision:
     status: Literal["approved", "suppressed"]
     violations: List[Dict[str, str]] = field(default_factory=list)
+
 
 def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
               references: Optional[List[str]] = None,

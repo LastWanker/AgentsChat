@@ -7,7 +7,7 @@ class RuntimeLoop:
         self._tick_index = 0
 
     def tick(self):
-        it = self.scheduler.choose(self.controller)
+        it = self.scheduler.choose(self.controller, loop_tick=self._tick_index)
         if it is None:
             print(f"[runtime/loop.py] ⏸️ 队列里没人排队，说话暂停。")
             return False

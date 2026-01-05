@@ -43,6 +43,29 @@ class CooldownGuard:
 
         return len(violations) == 0, violations
 
+    def next_available(self, agent_id: str, tick_index: int, now: Optional[float] = None) -> Tuple[Optional[int], Optional[float]]:
+        """返回下一次允许执行的 tick 与时间（如果有限制）。"""
+        now = now if now is not None else time.monotonic()
+
+        next_tick: Optional[int] = None
+        next_time: Optional[float] = None
+
+        last_tick = self._last_tick_by_agent.get(agent_id)
+        if last_tick is not None:
+            if tick_index - last_tick < 1:
+                next_tick = last_tick + 1
+
+        cd_sec = self.cooldowns_sec.get(agent_id, 0.0)
+        last_time = self._last_time_by_agent.get(agent_id)
+        if cd_sec > 0 and last_time is not None:
+            next_time = (last_time + cd_sec) if next_time is None else max(next_time, last_time + cd_sec)
+
+        if self.inter_event_gap_sec > 0 and self._last_event_time is not None:
+            gap_ready = self._last_event_time + self.inter_event_gap_sec
+            next_time = gap_ready if next_time is None else max(next_time, gap_ready)
+
+        return next_tick, next_time
+
     def record_success(self, agent_id: str, tick_index: int, now: Optional[float] = None):
         now = now if now is not None else time.monotonic()
         self._last_tick_by_agent[agent_id] = tick_index
@@ -78,7 +101,11 @@ class Router:
             print(
                 f"[platform/router.py] ⏳ {agent.name} 的意向 {intention.intention_id} 触发 cooldown，暂不处理。"
             )
-            intention.status = "suppressed"
+            defer_tick, defer_time = self.cooldown_guard.next_available(agent.id, tick_index, now=now)
+            intention.deferred_until_tick = defer_tick if defer_tick is not None else tick_index + 1
+            # fallback: 至少等待一个极短时间片，避免立即重试
+            intention.deferred_until_time = defer_time if defer_time is not None else now + 0.1
+            intention.status = "pending"
             return Decision(status="suppressed", violations=cooldown_violations)
         print(
             f"[platform/router.py] 📨 收到 {agent.name} 的意向 {intention.intention_id}，先让解释器看看。"
