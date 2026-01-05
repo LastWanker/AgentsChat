@@ -71,37 +71,37 @@ class Router:
         self.interpreter = interpreter
         self.cooldown_guard = CooldownGuard(cooldowns_sec, inter_event_gap_sec=inter_event_gap_sec)
 
-        def handle_intention(self, intention: Intention, agent, *, tick_index: int = 0) -> Decision:
-            now = time.monotonic()
-            allow, cooldown_violations = self.cooldown_guard.allow(agent.id, tick_index, now=now)
-            if not allow:
-                print(
-                    f"[platform/router.py] ⏳ {agent.name} 的意向 {intention.intention_id} 触发 cooldown，暂不处理。"
-                )
-                intention.status = "suppressed"
-                return Decision(status="suppressed", violations=cooldown_violations)
+    def handle_intention(self, intention: Intention, agent, *, tick_index: int = 0) -> Decision:
+        now = time.monotonic()
+        allow, cooldown_violations = self.cooldown_guard.allow(agent.id, tick_index, now=now)
+        if not allow:
             print(
-                f"[platform/router.py] 📨 收到 {agent.name} 的意向 {intention.intention_id}，先让解释器看看。"
+                f"[platform/router.py] ⏳ {agent.name} 的意向 {intention.intention_id} 触发 cooldown，暂不处理。"
             )
-            decision: Decision = self.interpreter.interpret_intention(intention, agent, self.world, self.store)
-            if decision.status != "approved":
-                print(
-                    f"[platform/router.py] 🚫 意向 {intention.intention_id} 没过审，状态是 {decision.status}，先压下去。"
-                )
-                intention.status = "suppressed"
-                return decision
-
-            event = self._intention_to_event(intention, agent)
+            intention.status = "suppressed"
+            return Decision(status="suppressed", violations=cooldown_violations)
+        print(
+            f"[platform/router.py] 📨 收到 {agent.name} 的意向 {intention.intention_id}，先让解释器看看。"
+        )
+        decision: Decision = self.interpreter.interpret_intention(intention, agent, self.world, self.store)
+        if decision.status != "approved":
             print(
-                f"[platform/router.py] ✅ 意向 {intention.intention_id} 通过，转换成事件 {event.event_id}，准备广播。"
+                f"[platform/router.py] 🚫 意向 {intention.intention_id} 没过审，状态是 {decision.status}，先压下去。"
             )
-            self.store.append(event)
-            # self.world.emit(event.__dict__)  # 兼容你现有 World.emit(dict)
-            self.world.emit(event)
-            intention.status = "executed"
-            self.cooldown_guard.record_success(agent.id, tick_index, now=now)
-            print(f"[platform/router.py] 📣 事件 {event.event_id} 已送入世界，大家随意围观。")
+            intention.status = "suppressed"
             return decision
+
+        event = self._intention_to_event(intention, agent)
+        print(
+            f"[platform/router.py] ✅ 意向 {intention.intention_id} 通过，转换成事件 {event.event_id}，准备广播。"
+        )
+        self.store.append(event)
+        # self.world.emit(event.__dict__)  # 兼容你现有 World.emit(dict)
+        self.world.emit(event)
+        intention.status = "executed"
+        self.cooldown_guard.record_success(agent.id, tick_index, now=now)
+        print(f"[platform/router.py] 📣 事件 {event.event_id} 已送入世界，大家随意围观。")
+        return decision
 
     def _intention_to_event(self, intention: Intention, agent) -> Event:
         # 最小映射：kind -> event.type, payload -> content

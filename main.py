@@ -6,7 +6,7 @@ from agents.agent import Agent
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--policy", required=True)
+    p.add_argument("--policy", default="policies/intent_constraint.yaml")
     p.add_argument("--max-ticks", type=int, default=50)
     p.add_argument("--enable-llm", action="store_true")
     return p.parse_args()
