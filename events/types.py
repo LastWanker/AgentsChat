@@ -1,10 +1,18 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 from uuid import uuid4
 from datetime import datetime, UTC
 
 Scope = str  # "public" or "group:<id>"
+
+
+class WeightedReference(TypedDict):
+    event_id: str
+    weight: float
+
+
+Reference = Union[str, WeightedReference]
 
 
 @dataclass
@@ -14,7 +22,7 @@ class Intention:
     kind: str  # speak / submit / ...
     payload: Dict[str, Any]  # draft content
     scope: Scope = "public"
-    references: List[str] = field(default_factory=list)
+    references: List[Reference] = field(default_factory=list)
     completed: bool = True
     urgency: float = 0.0
     status: Literal["pending", "suppressed", "approved", "executed"] = "pending"
@@ -30,7 +38,7 @@ class Event:
     sender: str
     scope: Scope
     content: Dict[str, Any]
-    references: List[str] = field(default_factory=list)
+    references: List[Reference] = field(default_factory=list)
     recipients: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     completed: bool = True
@@ -43,7 +51,7 @@ class Decision:
 
 
 def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
-              references: Optional[List[str]] = None,
+              references: Optional[List[Reference]] = None,
               recipients: Optional[List[str]] = None,
               metadata: Optional[Dict[str, Any]] = None,
               completed: bool = True) -> Event:
