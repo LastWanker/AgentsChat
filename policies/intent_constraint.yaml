@@ -57,6 +57,11 @@ kinds:
       references:
         min: 1
 
+  speak:
+    allow: true
+    require:
+      fields:
+        - payload.text
 
   speak_public:
     allow: true
