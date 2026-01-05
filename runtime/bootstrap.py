@@ -14,7 +14,7 @@ from agents.interpreter import IntentInterpreter  # 如果你是 llm/interpreter
 from agents.agent import Agent
 from events.store import EventStore
 from events.query import EventQuery
-from agents.proposer import IntentionProposer  # 你现在的 proposer
+from agents.proposer import IntentionProposer, ProposerConfig  # 你现在的 proposer
 
 
 @dataclass
@@ -27,6 +27,7 @@ class RuntimeConfig:
 
     # Router 纪律
     agent_cooldowns_sec: Optional[Dict[str, float]] = None
+    inter_event_gap_sec: float = 0.0
 
     # Loop
     max_ticks: int = 50
@@ -53,22 +54,31 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     world = World(store=store) if "store" in World.__init__.__code__.co_varnames else World()
 
     # === Proposer/Interpreter ===
-    proposer = IntentionProposer(enable_llm=cfg.enable_llm, llm_client=cfg.llm_client)
-    interpreter = IntentInterpreter(policy_path=cfg.policy_path)  # 你现在 Interpreter 读 yaml
+    # proposer = IntentionProposer(enable_llm=cfg.enable_llm, llm_client=cfg.llm_client)
+    # interpreter = IntentInterpreter(policy_path=cfg.policy_path)  # 你现在 Interpreter 读 yaml
+    proposer = IntentionProposer(
+        config=ProposerConfig(enable_llm=cfg.enable_llm),
+        llm_client=cfg.llm_client,
+    )
+    interpreter = IntentInterpreter(constraint_path=cfg.policy_path)  # 现在 Interpreter 读 yaml
 
     # === Scheduler/Router/Controller/Loop ===
     scheduler = Scheduler()
     router = Router(
         world=world,
+        store=store,
         interpreter=interpreter,
         cooldowns_sec=cfg.agent_cooldowns_sec or {},
+        inter_event_gap_sec=cfg.inter_event_gap_sec,
     )
     controller = AgentController(
+        agents=cfg.agents,
         proposer=proposer,
-        scheduler=scheduler,
+        store=store,
+        query=query,
     )
     loop = RuntimeLoop(
-        world=world,
+        controller=controller,
         scheduler=scheduler,
         router=router,
         max_ticks=cfg.max_ticks,

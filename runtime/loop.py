@@ -1,8 +1,10 @@
 class RuntimeLoop:
-    def __init__(self, controller, scheduler, router):
+    def __init__(self, controller, scheduler, router, *, max_ticks: int = 50):
         self.controller = controller
         self.scheduler = scheduler
         self.router = router
+        self.max_ticks = max_ticks
+        self._tick_index = 0
 
     def tick(self):
         it = self.scheduler.choose(self.controller)
@@ -15,12 +17,14 @@ class RuntimeLoop:
         print(
             f"[runtime/loop.py] 🎯 抽中了 {agent.name} 的意向 {it.intention_id}，类型是 {it.kind}。"
         )
-        self.router.handle_intention(it, agent)
+        self.router.handle_intention(it, agent, tick_index=self._tick_index)
+        self._tick_index += 1
         return True
 
-    def run(self, max_ticks: int = 50):
-        print(f"[runtime/loop.py] ▶️ 开始循环跑 {max_ticks} 轮，看看会发生什么。")
-        for _ in range(max_ticks):
+    def run(self, max_ticks: int | None = None):
+        total_ticks = max_ticks if max_ticks is not None else self.max_ticks
+        print(f"[runtime/loop.py] ▶️ 开始循环跑 {total_ticks} 轮，看看会发生什么。")
+        for _ in range(total_ticks):
             progressed = self.tick()
             if not progressed:
                 print("[runtime/loop.py] 💤 没有新的意向要处理，提前收工。\n")

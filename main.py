@@ -3,6 +3,7 @@ import argparse
 from runtime.bootstrap import RuntimeConfig, bootstrap
 from agents.agent import Agent
 
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--policy", required=True)
@@ -28,6 +29,7 @@ def main():
             "Alice": 2.0,
             "Bob": 2.0,
         },
+        inter_event_gap_sec=1.0,
         seed_events=[
             # 让 BOSS 当 seed 发生器：从世界发起第一条请求
             boss.request_anyone("请大家给出系统下一步的最小可运行闭环建议"),
