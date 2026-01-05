@@ -46,6 +46,9 @@ class IntentInterpreter:
                 self.policy = yaml.safe_load(f) or {}
 
         self.kinds = self.policy.get("kinds", {}) or {}
+        print(
+            f"[agents/interpreter.py] 📖 装载策略 {constraint_path} 完成，定义了 {len(self.kinds)} 种意向规则。"
+        )
 
     # ===== 这就是 Router 要的适配层方法 =====
     def interpret_intention(self, intention, agent, world, store) -> Any:
@@ -55,25 +58,41 @@ class IntentInterpreter:
         """
         it = _to_dict(intention)
         ag = _to_dict(agent)
+        print(
+            f"[agents/interpreter.py] 🔎 开始审查意向 {it.get('intention_id', '<no-id>')} 类型 {it.get('kind', '<unknown>')}"\
+            f"，来自 {ag.get('name', ag.get('id', '<unknown>'))}。"
+        )
 
         kind = it.get("kind")
         if not kind:
-            return self._decision(
+            decision = self._decision(
                 "suppressed",
                 [{"kind": "require", "rule": "missing kind", "detail": "intention.kind"}],
             )
+            print(
+                f"[agents/interpreter.py] ⚠️ 意向缺少 kind 字段，直接压制：{decision}."
+            )
+            return decision
 
         ruleset = self.kinds.get(kind)
         if not ruleset:
             # 没有任何规则时，默认放行，保证 demo 可运行
             if not self.kinds:
-                return self._decision("approved", [])
-            return self._decision(
+                decision = self._decision("approved", [])
+                print(
+                    f"[agents/interpreter.py] 🆓 未配置任何规则，意向 {it.get('intention_id', '<no-id>')} 默认通过。"
+                )
+                return decision
+            decision = self._decision(
                 # "suppressed",
                 # [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
                 "approved",
                 [{"kind": "warn", "rule": f"unknown kind {kind}", "detail": kind}],
             )
+            print(
+                f"[agents/interpreter.py] ❔ 未找到 {kind} 的规则，带 warn 放行：{decision}."
+            )
+            return decision
 
         violations: List[Dict[str, str]] = []
 
@@ -84,9 +103,17 @@ class IntentInterpreter:
         violations.extend(self._check_forbid(ruleset.get("forbid"), it, ag, world, store))
 
         if violations:
-            return self._decision("suppressed", violations)
+            decision = self._decision("suppressed", violations)
+            print(
+                f"[agents/interpreter.py] 🚫 意向 {it.get('intention_id', '<no-id>')} 未通过：{violations}."
+            )
+            return decision
 
-        return self._decision("approved", [])
+        decision = self._decision("approved", [])
+        print(
+            f"[agents/interpreter.py] ✅ 意向 {it.get('intention_id', '<no-id>')} 通过审查。"
+        )
+        return decision
 
     # ---------------- require ----------------
     def _check_require(self, require_block: Optional[Dict[str, Any]], it, ag, world, store):

@@ -51,7 +51,9 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     # === 底座 ===
     store = EventStore()
     query = EventQuery(store)
+    print("[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery。")
     world = World(store=store) if "store" in World.__init__.__code__.co_varnames else World()
+    print("[runtime/bootstrap.py] 🌍 World 构建完成，准备接线各路组件。")
 
     # === Proposer/Interpreter ===
     # proposer = IntentionProposer(enable_llm=cfg.enable_llm, llm_client=cfg.llm_client)
@@ -61,6 +63,7 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         llm_client=cfg.llm_client,
     )
     interpreter = IntentInterpreter(constraint_path=cfg.policy_path)  # 现在 Interpreter 读 yaml
+    print("[runtime/bootstrap.py] 🧠 IntentionProposer 与 IntentInterpreter 已就绪。")
 
     # === Scheduler/Router/Controller/Loop ===
     scheduler = Scheduler()
@@ -83,17 +86,23 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         router=router,
         max_ticks=cfg.max_ticks,
     )
+    print("[runtime/bootstrap.py] 🔌 Scheduler/Router/Controller/Loop 全部完成装配。")
 
     # === 插线：Agent 观察世界 ===
     for agent in cfg.agents:
         world.add_observer(AgentObserver(agent))
+    print(f"[runtime/bootstrap.py] 👀 已为 {len(cfg.agents)} 个 Agent 接入世界观察通道。")
     # === 插线：Controller 观察世界（产出意向入队） ===
     world.add_observer(controller)
+    print("[runtime/bootstrap.py] 🛰️ AgentController 也开始观察世界事件。")
 
     # === 注入 seed events（Boss 或测试用）===
     if cfg.seed_events:
         for e in cfg.seed_events:
             world.emit(e)
+        print(f"[runtime/bootstrap.py] 🌱 预置种子事件 {len(cfg.seed_events)} 条已注入世界。")
+    else:
+        print("[runtime/bootstrap.py] 🌱 没有预置种子事件，等待运行时自然生成。")
 
     return AppRuntime(
         world=world,

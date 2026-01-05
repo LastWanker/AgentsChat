@@ -20,6 +20,9 @@ class World:
         - observer.on_event(event)
         """
         self.observers.append(observer)
+        print(
+            f"[platform/world.py] 👂 注册观察者 {getattr(observer, 'id', type(observer).__name__)}，当前总数 {len(self.observers)}。"
+        )
 
     def _is_visible(self, event: Dict[str, Any], observer) -> bool:
         """
@@ -44,6 +47,9 @@ class World:
         世界接收一个已经发生的事件
         """
         event_dict = self._to_dict(event)
+        print(
+            f"[platform/world.py] 🌐 收到事件 {event_dict.get('event_id', '<no-id>')}，准备通知观察者。"
+        )
 
         # 1. 记录历史（事实不可更改）
         # self.events.append(event)
@@ -56,6 +62,9 @@ class World:
             # if self._is_visible(event, observer):
             #     observer.on_event(event)
             if self._is_visible(event_dict, observer):
+                print(
+                    f"[platform/world.py] 📡 事件 {event_dict.get('event_id', '<no-id>')} 对 {getattr(observer, 'id', type(observer).__name__)} 可见，派发中。"
+                )
                 observer.on_event(event_dict)
 
     # ---------- 查询 ----------

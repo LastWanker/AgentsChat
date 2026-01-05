@@ -237,6 +237,9 @@ class Agent:
         event_id = event.get("event_id")
         if event_id:
             self.memory.append(event_id)
+            print(
+                f"[agents/agent.py] 👁️  Agent {self.name} 记录看到的事件 {event_id}，当前记忆 {len(self.memory)} 条。"
+            )
 
         # self.memory.append({
         #     "seen_event": event["event_id"]
