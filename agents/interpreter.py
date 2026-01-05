@@ -6,7 +6,7 @@ import re
 from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-_ALLOWED_CALLS = {"abs", "len", "is_empty"}
+_ALLOWED_CALLS = {"abs", "len", "is_empty", "get"}
 
 
 def is_empty(x: Any) -> bool:
@@ -15,6 +15,12 @@ def is_empty(x: Any) -> bool:
     if isinstance(x, (str, list, dict, tuple, set)):
         return len(x) == 0
     return False
+
+
+def get_value(d: Any, key: Any, default: Any = None) -> Any:
+    if isinstance(d, dict):
+        return d.get(key, default)
+    return default
 
 
 _LOGIC_WORDS: List[Tuple[re.Pattern[str], str]] = [
@@ -110,6 +116,8 @@ class _SafeEval(ast.NodeVisitor):
             return len(*args)
         if fn == "is_empty":
             return is_empty(*args)
+        if fn == "get":
+            return get_value(*args)
         raise ValueError("call")
 
     def generic_visit(self, node):  # pragma: no cover - 防御性兜底
@@ -154,7 +162,7 @@ class IntentInterpreter:
     规则来自 intent_constraint.yaml（kinds: ...）。
     """
 
-    def __init__(self, constraint_path: str, *, allow_empty_policy: bool = False):
+    def __init__(self, constraint_path: str, *, allow_empty_policy: bool = False, allow_unknown_kind: Optional[bool] = None):
         self.allow_empty_policy = allow_empty_policy
         # with open(constraint_path, "r", encoding="utf-8") as f:
         #     self.policy = yaml.safe_load(f) or {}
@@ -167,6 +175,10 @@ class IntentInterpreter:
                 self.policy = yaml.safe_load(f) or {}
 
         self.kinds = self.policy.get("kinds", {}) or {}
+        if allow_unknown_kind is None:
+            self.allow_unknown_kind = not bool(self.kinds)
+        else:
+            self.allow_unknown_kind = allow_unknown_kind
         if not self.kinds and not allow_empty_policy:
             raise RuntimeError("未配置任何意向规则，请检查策略文件或开启 allow_empty_policy")
         print(
@@ -199,12 +211,22 @@ class IntentInterpreter:
 
         ruleset = self.kinds.get(kind)
         if not ruleset:
+            if not self.allow_unknown_kind:
+                decision = self._decision(
+                    "suppressed",
+                    [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
+                )
+                print(
+                    f"[agents/interpreter.py] ❔ 未找到 {kind} 的规则，压制：{decision}."
+                )
+                return decision
+
             decision = self._decision(
-                "suppressed",
-                [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
+                "approved",
+                [{"kind": "warn", "rule": f"unknown kind {kind}", "detail": kind}],
             )
             print(
-                f"[agents/interpreter.py] ❔ 未找到 {kind} 的规则，压制：{decision}."
+                f"[agents/interpreter.py] ⚠️ 未找到 {kind} 的规则，但允许未知类型通过：{decision}."
             )
             return decision
 
@@ -352,6 +374,7 @@ class IntentInterpreter:
             "abs": abs,
             "len": len,
             "is_empty": is_empty,
+            "get": get_value,
             "escalation_threshold": escalation_threshold,
         }
 

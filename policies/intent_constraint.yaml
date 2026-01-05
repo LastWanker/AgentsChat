@@ -4,6 +4,9 @@ policy:
   role: forward_constraint
   audience: system
 
+globals:
+  escalation_threshold: 0.75
+
 kinds:
 
   join_group:
@@ -62,13 +65,18 @@ kinds:
     require:
       fields:
         - payload.text
+    forbid:
+      - "is_empty(get(intention.payload, 'text'))"
 
   speak_public:
     allow: true
 
+    require:
+      fields:
+        - payload.text
+
     forbid:
-      - intention.references.is_empty == true
-      - intention.urgency < escalation_threshold
+      - "agent.scope != public AND intention.scope == public AND intention.urgency < escalation_threshold"
 
 
   state_change:
