@@ -1,8 +1,127 @@
 # agents/interpreter.py
 from __future__ import annotations
 
+import ast
+import re
 from dataclasses import asdict, is_dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, cast
+
+_ALLOWED_CALLS = {"abs", "len", "is_empty"}
+
+
+def is_empty(x: Any) -> bool:
+    if x is None:
+        return True
+    if isinstance(x, (str, list, dict, tuple, set)):
+        return len(x) == 0
+    return False
+
+
+_LOGIC_WORDS: List[Tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bAND\b"), "and"),
+    (re.compile(r"\bOR\b"), "or"),
+    (re.compile(r"\bNOT\b"), "not"),
+    (re.compile(r"\bTRUE\b"), "true"),
+    (re.compile(r"\bFALSE\b"), "false"),
+]
+
+
+class _SafeEval(ast.NodeVisitor):
+    def __init__(self, env: Dict[str, Any]):
+        self.env = env
+
+    def visit_Expression(self, node: ast.Expression):
+        return self.visit(cast(ast.AST, node.body))
+
+    def visit_Name(self, node: ast.Name):
+        if node.id in self.env:
+            return self.env[node.id]
+        raise NameError(node.id)
+
+    def visit_Constant(self, node: ast.Constant):
+        return node.value
+
+    def visit_BoolOp(self, node: ast.BoolOp):
+        vals = [bool(self.visit(cast(ast.AST, v))) for v in node.values]
+        if isinstance(node.op, ast.And):
+            return all(vals)
+        if isinstance(node.op, ast.Or):
+            return any(vals)
+        raise ValueError("boolop")
+
+    def visit_UnaryOp(self, node: ast.UnaryOp):
+        v = self.visit(cast(ast.AST, node.operand))
+        if isinstance(node.op, ast.Not):
+            return not bool(v)
+        if isinstance(node.op, ast.USub):
+            return -v
+        raise ValueError("unary")
+
+    def visit_Compare(self, node: ast.Compare):
+        left = self.visit(cast(ast.AST, node.left))
+        for op, comp in zip(node.ops, node.comparators):
+            right = self.visit(cast(ast.AST, comp))
+            ok = None
+            if isinstance(op, ast.Eq):
+                ok = left == right
+            elif isinstance(op, ast.NotEq):
+                ok = left != right
+            elif isinstance(op, ast.Lt):
+                ok = left < right
+            elif isinstance(op, ast.LtE):
+                ok = left <= right
+            elif isinstance(op, ast.Gt):
+                ok = left > right
+            elif isinstance(op, ast.GtE):
+                ok = left >= right
+            elif isinstance(op, ast.In):
+                ok = left in right
+            elif isinstance(op, ast.NotIn):
+                ok = left not in right
+            else:
+                raise ValueError("compare-op")
+            if not ok:
+                return False
+            left = right
+        return True
+
+    def visit_Subscript(self, node: ast.Subscript):
+        base = self.visit(cast(ast.AST, node.value))
+        slice_node = cast(ast.AST, node.slice.value if isinstance(node.slice, ast.Index) else node.slice)
+        sl = self.visit(slice_node)
+        return base[sl]
+
+    def visit_Attribute(self, node: ast.Attribute):
+        base = self.visit(cast(ast.AST, node.value))
+        if isinstance(base, dict):
+            return base.get(node.attr)
+        return getattr(base, node.attr)
+
+    def visit_Call(self, node: ast.Call):
+        if not isinstance(node.func, ast.Name):
+            raise ValueError("call-func")
+        fn = node.func.id
+        if fn not in _ALLOWED_CALLS:
+            raise ValueError(f"call-not-allowed:{fn}")
+        args = [self.visit(cast(ast.AST, a)) for a in node.args]
+        if fn == "abs":
+            return abs(*args)
+        if fn == "len":
+            return len(*args)
+        if fn == "is_empty":
+            return is_empty(*args)
+        raise ValueError("call")
+
+    def generic_visit(self, node):  # pragma: no cover - 防御性兜底
+        raise ValueError(f"node-not-allowed:{type(node).__name__}")
+
+
+def _safe_bool_expr(expr: str, env: Dict[str, Any]) -> bool:
+    for pat, rep in _LOGIC_WORDS:
+        expr = pat.sub(rep, expr)
+    tree = ast.parse(expr, mode="eval")
+    return bool(_SafeEval(env).visit(tree))
+
 
 # import yaml
 try:
@@ -35,17 +154,21 @@ class IntentInterpreter:
     规则来自 intent_constraint.yaml（kinds: ...）。
     """
 
-    def __init__(self, constraint_path: str):
+    def __init__(self, constraint_path: str, *, allow_empty_policy: bool = False):
+        self.allow_empty_policy = allow_empty_policy
         # with open(constraint_path, "r", encoding="utf-8") as f:
         #     self.policy = yaml.safe_load(f) or {}
         if yaml is None:
-            # 没有 PyYAML 时，退化为空策略（全部 approved）
+            if not allow_empty_policy:
+                raise RuntimeError("PyYAML 未安装，无法加载策略；请 pip install pyyaml")
             self.policy = {}
         else:
             with open(constraint_path, "r", encoding="utf-8") as f:
                 self.policy = yaml.safe_load(f) or {}
 
         self.kinds = self.policy.get("kinds", {}) or {}
+        if not self.kinds and not allow_empty_policy:
+            raise RuntimeError("未配置任何意向规则，请检查策略文件或开启 allow_empty_policy")
         print(
             f"[agents/interpreter.py] 📖 装载策略 {constraint_path} 完成，定义了 {len(self.kinds)} 种意向规则。"
         )
@@ -59,7 +182,7 @@ class IntentInterpreter:
         it = _to_dict(intention)
         ag = _to_dict(agent)
         print(
-            f"[agents/interpreter.py] 🔎 开始审查意向 {it.get('intention_id', '<no-id>')} 类型 {it.get('kind', '<unknown>')}"\
+            f"[agents/interpreter.py] 🔎 开始审查意向 {it.get('intention_id', '<no-id>')} 类型 {it.get('kind', '<unknown>')}"
             f"，来自 {ag.get('name', ag.get('id', '<unknown>'))}。"
         )
 
@@ -76,21 +199,12 @@ class IntentInterpreter:
 
         ruleset = self.kinds.get(kind)
         if not ruleset:
-            # 没有任何规则时，默认放行，保证 demo 可运行
-            if not self.kinds:
-                decision = self._decision("approved", [])
-                print(
-                    f"[agents/interpreter.py] 🆓 未配置任何规则，意向 {it.get('intention_id', '<no-id>')} 默认通过。"
-                )
-                return decision
             decision = self._decision(
-                # "suppressed",
-                # [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
-                "approved",
-                [{"kind": "warn", "rule": f"unknown kind {kind}", "detail": kind}],
+                "suppressed",
+                [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
             )
             print(
-                f"[agents/interpreter.py] ❔ 未找到 {kind} 的规则，带 warn 放行：{decision}."
+                f"[agents/interpreter.py] ❔ 未找到 {kind} 的规则，压制：{decision}."
             )
             return decision
 
@@ -141,10 +255,25 @@ class IntentInterpreter:
 
                 allowed_types = ref_req.get("event_types") or []
                 if allowed_types:
-                    if not self._any_ref_type_in(refs, allowed_types, store):
+                    try:
+                        ok = self._any_ref_type_in(refs, allowed_types, store)
+                    except Exception:
                         violations.append(
-                            {"kind": "require", "rule": "reference type mismatch", "detail": str(allowed_types)}
+                            {
+                                "kind": "require",
+                                "rule": "store_missing",
+                                "detail": "references.event_types needs store",
+                            }
                         )
+                    else:
+                        if not ok:
+                            violations.append(
+                                {
+                                    "kind": "require",
+                                    "rule": "reference type mismatch",
+                                    "detail": str(allowed_types),
+                                }
+                            )
 
         return violations
 
@@ -155,13 +284,20 @@ class IntentInterpreter:
 
         violations: List[Dict[str, str]] = []
 
-        # v0：forbid 条件用非常小的表达式执行（先跑通闭环）
+        # forbid 条件用安全的表达式解释器执行
         for expr in forbid_list:
             if not isinstance(expr, str):
                 # 不认识的 forbid 结构，先当作不命中（以后升级 DSL 再严格）
                 continue
 
-            hit = self._eval_expr(expr, it, ag, world, store)
+            try:
+                hit = self._eval_expr(expr, it, ag, world, store)
+            except Exception as e:  # pragma: no cover - 运行时防御
+                violations.append(
+                    {"kind": "forbid", "rule": "expr_error", "detail": f"{expr} :: {type(e).__name__}:{e}"}
+                )
+                continue
+
             if hit:
                 violations.append({"kind": "forbid", "rule": expr, "detail": "matched"})
         return violations
@@ -182,8 +318,10 @@ class IntentInterpreter:
         return True
 
     def _any_ref_type_in(self, refs: List[str], allowed_types: List[str], store) -> bool:
+        if store is None:
+            raise RuntimeError("store missing")
         for rid in refs:
-            ev = store.get(rid) if store else None
+            ev = store.get(rid)
             if not ev:
                 continue
             # ev 可能是 dataclass，也可能是 dict
@@ -193,24 +331,15 @@ class IntentInterpreter:
         return False
 
     def _eval_expr(self, expr: str, it, ag, world, store) -> bool:
-        """
-        v0 表达式执行：先支持你 YAML 里那种简单写法。
-        允许用：
-          intention.xxx
-          agent.xxx
-          referenced_event.scope   （取第一个 reference 对应的 event）
-          true/false/public
-          == != < > and or not abs()
-
-        先跑通闭环。后面再换成 DSL（把 eval 干掉）。
-        """
         referenced_event = None
         refs = it.get("references") or []
         if refs and store:
             referenced_event = store.get(refs[0])
         rev = _to_dict(referenced_event)
 
-        # 小心：这里用 eval 是“工程推进版”，不是终局。
+        globals_block = (self.policy.get("globals") or {}) if hasattr(self, "policy") else {}
+        escalation_threshold = globals_block.get("escalation_threshold", 0.75)
+
         env = {
             "intention": it,
             "agent": ag,
@@ -221,47 +350,9 @@ class IntentInterpreter:
             "false": False,
             "public": "public",
             "abs": abs,
+            "len": len,
+            "is_empty": is_empty,
+            "escalation_threshold": escalation_threshold,
         }
 
-        try:
-            # 让 intention.completed 这种访问可用：用 dict 会变成 intention["completed"] 不方便
-            # 所以我们要求 expr 写成 intention.get("completed") ? 不现实。
-            # 简单处理：把 intention.xxx 重写成 intention["xxx"]
-            rewritten = self._rewrite_dot_access(expr)
-            return bool(eval(rewritten, {"__builtins__": {}}, env))
-        except Exception:
-            return False
-
-    def _rewrite_dot_access(self, expr: str) -> str:
-        """
-        把 intention.completed 变成 intention["completed"]
-        把 agent.scope 变成 agent["scope"]
-        把 referenced_event.scope 变成 referenced_event["scope"]
-
-        v0：非常粗暴但够用（只处理一层点号）。
-        """
-        for prefix in ("intention.", "agent.", "referenced_event."):
-            # 逐个替换：prefix + name（name 只认字母数字下划线）
-            out = []
-            i = 0
-            while i < len(expr):
-                j = expr.find(prefix, i)
-                if j == -1:
-                    out.append(expr[i:])
-                    break
-                out.append(expr[i:j])
-                k = j + len(prefix)
-                name = []
-                while k < len(expr) and (expr[k].isalnum() or expr[k] == "_"):
-                    name.append(expr[k])
-                    k += 1
-                if name:
-                    base = prefix[:-1]  # "intention"
-                    out.append(f'{base}["{"".join(name)}"]')
-                    i = k
-                else:
-                    # 没抓到字段名，原样放回
-                    out.append(prefix)
-                    i = k
-            expr = "".join(out)
-        return expr
+        return _safe_bool_expr(expr, env)
