@@ -22,6 +22,7 @@ class Intention:
     kind: str  # speak / submit / ...
     payload: Dict[str, Any]  # draft content
     scope: Scope = "public"
+    candidate_references: List[Reference] = field(default_factory=list)
     references: List[Reference] = field(default_factory=list)
     completed: bool = True
     urgency: float = 0.0

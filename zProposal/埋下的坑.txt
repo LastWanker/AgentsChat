@@ -26,10 +26,5 @@ proposer采用了无llm自动降级的操作，不知道是否可靠。
 
 四、怎么利用现有的系统动态管理一场chat，比如中途加入，Boss（也就是用户扮演的人）发言，等等？
 
-五、当前 forbid 解析器仅把 intention.xxx 重写成下标访问并直接 eval，环境只注入了布尔值、public 字符串等少量符号；
-像 escalation_threshold、is_empty 这类名字不在环境里，命中异常会被捕获并返回 False，所以 speak_public 里的伪属性和大写 AND 条件会静默失效。
+五、completed的默认有错误，其中speak上来是False。不确定其它的有没有。
 
-如果运行环境缺少 PyYAML，解释器会把策略置为空对象并默认所有意向通过，等于策略完全失效，这是一个较大的稳定性缺口。
-require.references.event_types 的校验依赖 store 查到引用事件；若调用方未传入 store，则 _any_ref_type_in 始终返回 False，导致带 event_types 约束的意向（如 submit）无论引用什么都会被判定为 mismatch。
-
-表达式重写只支持一层点号，无法识别更深的路径或函数式写法，任何更复杂的写法都会被判作未命中，策略看起来存在但并不起作用。

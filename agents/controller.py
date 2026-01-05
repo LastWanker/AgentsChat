@@ -160,6 +160,7 @@ class AgentController:
             kind="speak",
             payload={"text": f"我是 {a.name}，系统开始跑了。"},
             scope=a.scope,
+            candidate_references=[],
             references=[],
             completed=True,
             urgency=0.1,

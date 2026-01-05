@@ -110,6 +110,7 @@ class IntentionProposer:
                     kind="speak",
                     payload={"text": text},
                     scope=context.scope or "public",
+                    candidate_references=refs,
                     references=refs,
                     completed=False,
                 )
@@ -125,6 +126,7 @@ class IntentionProposer:
                     kind="speak",
                     payload={"text": text},
                     scope=context.scope or "public",
+                    candidate_references=refs,
                     references=refs,
                     completed=False,
                 )
