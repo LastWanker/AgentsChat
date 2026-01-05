@@ -28,6 +28,12 @@ class RuntimeConfig:
     enable_llm: bool = False
     llm_client: Optional[object] = None  # 先占位
 
+    # Store/session
+    data_dir: str = "data/sessions"
+    session_id: Optional[str] = None  # 强制指定新 session 名称
+    resume_session_id: Optional[str] = None  # 恢复已有 session
+    session_metadata: Optional[Dict[str, Any]] = None
+
     # Router 纪律
     agent_cooldowns_sec: Optional[Dict[str, float]] = None
     inter_event_gap_sec: float = 0.0
@@ -91,9 +97,27 @@ def _normalize_seed_event(seed: Any) -> Event:
 
 def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     # === 底座 ===
-    store = EventStore()
+    session_meta = {
+        "policy_path": cfg.policy_path,
+        "enable_llm": cfg.enable_llm,
+        "agents": [
+            {"id": ag.id, "name": ag.name, "role": ag.role, "expertise": ag.expertise}
+            for ag in cfg.agents
+        ],
+    }
+    if cfg.session_metadata:
+        session_meta.update(cfg.session_metadata)
+
+    store = EventStore(
+        base_dir=cfg.data_dir,
+        session_id=cfg.resume_session_id or cfg.session_id,
+        resume=cfg.resume_session_id is not None,
+        metadata=session_meta,
+    )
     query = EventQuery(store)
-    print("[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery。")
+    print(
+        f"[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery，session={store.session_id}。"
+    )
     world = World(store=store) if "store" in World.__init__.__code__.co_varnames else World()
     print("[runtime/bootstrap.py] 🌍 World 构建完成，准备接线各路组件。")
 

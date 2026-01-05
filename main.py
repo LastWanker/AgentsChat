@@ -9,6 +9,10 @@ def parse_args():
     p.add_argument("--policy", default="policies/intent_constraint.yaml")
     p.add_argument("--max-ticks", type=int, default=50)
     p.add_argument("--enable-llm", action="store_true")
+    p.add_argument("--data-dir", default="data/sessions", help="session 落盘目录")
+    session_group = p.add_mutually_exclusive_group()
+    session_group.add_argument("--session-id", help="强制指定新 session_id")
+    session_group.add_argument("--resume", metavar="SESSION_ID", help="恢复指定 session")
     return p.parse_args()
 
 def main():
@@ -24,6 +28,9 @@ def main():
         policy_path=args.policy,
         enable_llm=args.enable_llm,
         max_ticks=args.max_ticks,
+        data_dir=args.data_dir,
+        session_id=args.session_id,
+        resume_session_id=args.resume,
         agent_cooldowns_sec={
             # BOSS 不限速，其他人比如 2 秒
             "Alice": 2.0,
@@ -38,6 +45,7 @@ def main():
 
     rt = bootstrap(cfg)
     rt.loop.run()
+
 
 if __name__ == "__main__":
     main()
