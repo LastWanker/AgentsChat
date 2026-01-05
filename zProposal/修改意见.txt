@@ -1,0 +1,257 @@
+1) 先把你列的漏洞逐个“钉死”
+漏洞 A：forbid 用 eval + 环境缺符号 → 静默变 False → 策略看似存在实则没用
+
+你现在 _eval_expr() 的异常捕获是“吞掉一切并返回 False”。这会导致：
+
+拼写错一个变量名，策略就形同虚设；
+
+写了 AND / OR 这种 YAML 里常见的伪语法，也直接失效；
+
+更深层点号、函数式写法也容易被吞。
+
+修法（推荐 v0.31 的“硬一点但不复杂”方案）：
+
+禁止 eval，改成 AST 白名单解释器（只允许 Name/BoolOp/Compare/Attribute/Subscript/Call(白名单函数) 等）。
+
+错误不再静默：返回一个 violation（例如 forbid_expr_error），默认压制或至少 warn。
+
+做一个“小词典”支持你说的 is_empty()、escalation_threshold 这类符号。
+
+下面是一份可以直接替换 agents/interpreter.py 中 forbid 求值部分的补丁（核心函数都给你了）：
+
+# agents/interpreter.py （把 _eval_expr 与 _rewrite_dot_access 改成下面这一套）
+import ast
+import re
+from typing import Any, Dict, Optional, List, Tuple
+
+_ALLOWED_CALLS = {"abs", "len", "is_empty"}
+
+def is_empty(x: Any) -> bool:
+    if x is None:
+        return True
+    if isinstance(x, (str, list, dict, tuple, set)):
+        return len(x) == 0
+    return False
+
+_LOGIC_WORDS = [
+    (re.compile(r"\bAND\b"), "and"),
+    (re.compile(r"\bOR\b"), "or"),
+    (re.compile(r"\bNOT\b"), "not"),
+    (re.compile(r"\bTRUE\b"), "true"),
+    (re.compile(r"\bFALSE\b"), "false"),
+]
+
+class _SafeEval(ast.NodeVisitor):
+    def __init__(self, env: Dict[str, Any]):
+        self.env = env
+
+    def visit_Expression(self, node: ast.Expression):
+        return self.visit(node.body)
+
+    def visit_Name(self, node: ast.Name):
+        if node.id in self.env:
+            return self.env[node.id]
+        raise NameError(node.id)
+
+    def visit_Constant(self, node: ast.Constant):
+        return node.value
+
+    def visit_BoolOp(self, node: ast.BoolOp):
+        vals = [bool(self.visit(v)) for v in node.values]
+        if isinstance(node.op, ast.And):
+            return all(vals)
+        if isinstance(node.op, ast.Or):
+            return any(vals)
+        raise ValueError("boolop")
+
+    def visit_UnaryOp(self, node: ast.UnaryOp):
+        v = self.visit(node.operand)
+        if isinstance(node.op, ast.Not):
+            return not bool(v)
+        if isinstance(node.op, ast.USub):
+            return -v
+        raise ValueError("unary")
+
+    def visit_Compare(self, node: ast.Compare):
+        left = self.visit(node.left)
+        for op, comp in zip(node.ops, node.comparators):
+            right = self.visit(comp)
+            ok = None
+            if isinstance(op, ast.Eq): ok = left == right
+            elif isinstance(op, ast.NotEq): ok = left != right
+            elif isinstance(op, ast.Lt): ok = left < right
+            elif isinstance(op, ast.LtE): ok = left <= right
+            elif isinstance(op, ast.Gt): ok = left > right
+            elif isinstance(op, ast.GtE): ok = left >= right
+            elif isinstance(op, ast.In): ok = left in right
+            elif isinstance(op, ast.NotIn): ok = left not in right
+            else:
+                raise ValueError("compare-op")
+            if not ok:
+                return False
+            left = right
+        return True
+
+    def visit_Subscript(self, node: ast.Subscript):
+        base = self.visit(node.value)
+        sl = self.visit(node.slice) if not isinstance(node.slice, ast.Index) else self.visit(node.slice.value)
+        return base[sl]
+
+    def visit_Attribute(self, node: ast.Attribute):
+        base = self.visit(node.value)
+        if isinstance(base, dict):
+            return base.get(node.attr)
+        return getattr(base, node.attr)
+
+    def visit_Call(self, node: ast.Call):
+        if not isinstance(node.func, ast.Name):
+            raise ValueError("call-func")
+        fn = node.func.id
+        if fn not in _ALLOWED_CALLS:
+            raise ValueError(f"call-not-allowed:{fn}")
+        args = [self.visit(a) for a in node.args]
+        if fn == "abs":
+            return abs(*args)
+        if fn == "len":
+            return len(*args)
+        if fn == "is_empty":
+            return is_empty(*args)
+        raise ValueError("call")
+
+    def generic_visit(self, node):
+        raise ValueError(f"node-not-allowed:{type(node).__name__}")
+
+def _normalize_logic_words(expr: str) -> str:
+    for pat, rep in _LOGIC_WORDS:
+        expr = pat.sub(rep, expr)
+    return expr
+
+def _safe_bool_expr(expr: str, env: Dict[str, Any]) -> bool:
+    expr = _normalize_logic_words(expr)
+    tree = ast.parse(expr, mode="eval")
+    return bool(_SafeEval(env).visit(tree))
+
+def _eval_expr(self, expr: str, it, ag, world, store) -> bool:
+    referenced_event = None
+    refs = it.get("references") or []
+    if refs and store:
+        referenced_event = store.get(refs[0])
+    rev = _to_dict(referenced_event)
+
+    # 你可以把这类“策略常量”放到 YAML 顶层 globals 里（下面我会给 YAML 片段）
+    globals_block = (self.policy.get("globals") or {}) if hasattr(self, "policy") else {}
+    escalation_threshold = globals_block.get("escalation_threshold", 0.75)
+
+    env = {
+        "intention": it,
+        "agent": ag,
+        "referenced_event": rev,
+        "world": world,
+        "store": store,
+        "true": True,
+        "false": False,
+        "public": "public",
+        "abs": abs,
+        "len": len,
+        "is_empty": is_empty,
+        "escalation_threshold": escalation_threshold,
+    }
+
+    # 这里不再吞异常：异常交给上层记录 violation
+    return _safe_bool_expr(expr, env)
+
+
+同时把 _check_forbid() 改成：异常时记录 violation，别装死：
+
+def _check_forbid(self, forbid_list, it, ag, world, store):
+    if not forbid_list:
+        return []
+    violations = []
+    for expr in forbid_list:
+        if not isinstance(expr, str):
+            continue
+        try:
+            hit = self._eval_expr(expr, it, ag, world, store)
+        except Exception as e:
+            violations.append({"kind": "forbid", "rule": "expr_error", "detail": f"{expr} :: {type(e).__name__}:{e}"})
+            continue
+        if hit:
+            violations.append({"kind": "forbid", "rule": expr, "detail": "matched"})
+    return violations
+
+
+这样你那句“伪属性、大写 AND 条件静默失效”的病根就拔了。
+
+interpreter
+
+漏洞 B：没装 PyYAML → policy 置空 → 所有意向默认通过（策略直接失效）
+
+这属于“安全带是纸糊的”。
+
+你现在 yaml is None 就 self.policy = {}，然后 if not self.kinds 就全部 approved。
+
+interpreter
+
+
+改法：默认应该 fail-fast（启动时报错退出），除非你显式给一个 allow_empty_policy=True 的开发模式开关。
+
+补丁很简单：
+
+# agents/interpreter.py 里的 __init__
+def __init__(self, constraint_path: str, *, allow_empty_policy: bool = False):
+    if yaml is None:
+        if not allow_empty_policy:
+            raise RuntimeError("PyYAML 未安装，无法加载策略；请 pip install pyyaml")
+        self.policy = {}
+    else:
+        with open(constraint_path, "r", encoding="utf-8") as f:
+            self.policy = yaml.safe_load(f) or {}
+
+
+同时把“没配置任何规则默认通过”的逻辑也收紧：
+
+开发期可以，但你现在已经在认真做制度了，就该让系统对自己更诚实。
+
+漏洞 C：require.references.event_types 依赖 store；store 为空就永远 False → 约束全错判
+
+这会让你以后“submit 必须引用 request”这种纪律失真。
+
+你现在 _any_ref_type_in(refs, allowed_types, store)：store 为空就永远 False，然后加 violation “reference type mismatch”。
+
+interpreter
+
+正确做法：store 缺失是系统配置错误，不是用户意向错误。
+所以 violation 应该是类似：
+
+{"kind":"require","rule":"store_missing","detail":"cannot validate references.event_types without store"}
+
+并且我建议：这种错直接让 decision suppressed（否则制度靠猜）。
+
+补丁：
+
+def _any_ref_type_in(self, refs, allowed_types, store):
+    if store is None:
+        raise RuntimeError("store missing")
+    ...
+
+
+然后在 _check_require 里 catch：
+
+if allowed_types:
+    try:
+        ok = self._any_ref_type_in(refs, allowed_types, store)
+    except Exception:
+        violations.append({"kind":"require","rule":"store_missing","detail":"references.event_types needs store"})
+    else:
+        if not ok:
+            violations.append({"kind":"require","rule":"reference type mismatch","detail":str(allowed_types)})
+
+漏洞 D：点号重写只支持一层，复杂表达式统统“未命中”
+
+上面我给你的 AST 方案已经把这个问题基本解决了：
+
+你根本不需要“字符串重写点号”。
+
+intention.completed、agent.scope、referenced_event.scope 直接用 visit_Attribute 支持，深层也能走。
+
+这就是为啥我说：别修补 rewrite_dot_access，直接换思路。
