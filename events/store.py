@@ -23,8 +23,8 @@ class EventStore:
         - resume=True 且提供 session_id 时，继续往已有 events.jsonl 追加
         """
 
-        self._events: List[Event] = []
-        self._by_id: Dict[str, Event] = {}
+        self._index: Dict[str, Dict] = {}
+        self._events_cache: Optional[List[Event]] = None
 
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -53,31 +53,42 @@ class EventStore:
             raise FileNotFoundError(f"session {self.session_id} 不存在，无法 resume")
 
         self.events_path = self.session_dir / "events.jsonl"
+        self.index_path = self.session_dir / "index.json"
         self.meta_path = self.session_dir / "meta.json"
 
         if resume:
             self._load_meta(metadata)
-            self._load_existing_events()
+            self._load_index()
         else:
             self._write_meta(metadata)
+            self._load_index()
 
         print(
             f"[events/store.py] 🗂️ session={self.session_id} 就绪，目录 {self.session_dir}。",
         )
 
     def append(self, event: Event) -> None:
-        self._events.append(event)
-        self._by_id[event.event_id] = event
-        self._append_event_to_file(event)
+        offset, length = self._append_event_to_file(event)
+        self._index[event.event_id] = self._index_entry(event, offset, length)
+        self._persist_index()
+
+        if self._events_cache is not None:
+            self._events_cache.append(event)
         print(
-            f"[events/store.py] 🗃️ 收纳事件 {event.event_id}，类型 {event.type}，目前库存 {len(self._events)} 条。",
+            f"[events/store.py] 🗃️ 收纳事件 {event.event_id}，类型 {event.type}。",
         )
 
     def get(self, event_id: str) -> Optional[Event]:
-        return self._by_id.get(event_id)
+        meta = self._index.get(event_id)
+        if not meta:
+            return None
+
+        return self._read_event(meta["offset"], meta["len"])
 
     def all(self) -> List[Event]:
-        return list(self._events)
+        if self._events_cache is None:
+            self._events_cache = self._load_all_events()
+        return list(self._events_cache)
 
     # ---------- persistence helpers ----------
     @staticmethod
@@ -105,25 +116,102 @@ class EventStore:
         with self.meta_path.open("w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    def _append_event_to_file(self, event: Event) -> None:
+    def _append_event_to_file(self, event: Event) -> tuple[int, int]:
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
-        with self.events_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(asdict(event), ensure_ascii=False) + "\n")
+        payload = json.dumps(asdict(event), ensure_ascii=False) + "\n"
+        data = payload.encode("utf-8")
 
-    def _load_existing_events(self) -> None:
+        with self.events_path.open("ab") as f:
+            offset = f.tell()
+            f.write(data)
+
+        return offset, len(data)
+
+    def _read_event(self, offset: int, length: int) -> Optional[Event]:
         if not self.events_path.exists():
-            print("[events/store.py] ⚠️ resume 模式下未找到 events.jsonl，视为空会话。")
+            return None
+
+        with self.events_path.open("rb") as f:
+            f.seek(offset)
+            raw = f.read(length)
+            if not raw:
+                raw = f.readline()
+        if not raw:
+            return None
+        data = json.loads(raw.decode("utf-8"))
+        return Event(**data)
+
+    def _load_all_events(self) -> List[Event]:
+        events: List[Event] = []
+        if not self.events_path.exists():
+            return events
+
+        with self.events_path.open("rb") as f:
+            while True:
+                offset = f.tell()
+                line = f.readline()
+                if not line:
+                    break
+                try:
+                    event = Event(**json.loads(line.decode("utf-8")))
+                except Exception:
+                    continue
+                self._index[event.event_id] = self._index_entry(event, offset, len(line))
+                events.append(event)
+
+        self._persist_index()
+        return events
+
+    def _load_index(self) -> None:
+        if self.index_path.exists():
+            try:
+                self._index = json.loads(self.index_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                print("[events/store.py] ⚠️ index.json 解析失败，将尝试重建索引。")
+                self._index = {}
+
+        if not self._index and self.events_path.exists():
+            print("[events/store.py] ♻️ 未找到有效索引，正在从 events.jsonl 重建 index。")
+            self._rebuild_index()
+
+    def _rebuild_index(self) -> None:
+        self._index = {}
+        if not self.events_path.exists():
             return
 
-        with self.events_path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+        with self.events_path.open("rb") as f:
+            while True:
+                offset = f.tell()
+                line = f.readline()
                 if not line:
+                    break
+                try:
+                    event = json.loads(line.decode("utf-8"))
+                    eid = event.get("event_id")
+                    if not eid:
+                        continue
+                    self._index[eid] = self._index_entry(event, offset, len(line))
+                except Exception:
                     continue
-                data = json.loads(line)
-                ev = Event(**data)
-                self._events.append(ev)
-                self._by_id[ev.event_id] = ev
-        print(
-            f"[events/store.py] ♻️ 从磁盘载入 {len(self._events)} 条历史事件，准备继续追加。",
+        self._persist_index()
+
+    def _persist_index(self) -> None:
+        self.index_path.parent.mkdir(parents=True, exist_ok=True)
+        self.index_path.write_text(
+            json.dumps(self._index, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+    @staticmethod
+    def _index_entry(event: Dict | Event, offset: int, length: int) -> Dict:
+        def _as_dict(ev: Dict | Event) -> Dict:
+            return ev if isinstance(ev, dict) else asdict(ev)
+
+        data = _as_dict(event)
+        return {
+            "offset": offset,
+            "len": length,
+            "type": data.get("type"),
+            "timestamp": data.get("timestamp"),
+            "sender": data.get("sender"),
+            "scope": data.get("scope"),
+        }
