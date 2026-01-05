@@ -1,7 +1,9 @@
 # runtime/bootstrap.py
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Optional, Dict, List, Any
+from uuid import uuid4
 
 # 下面这些 import 按你的实际路径调整
 from platform.world import World
@@ -10,9 +12,10 @@ from agents.controller import AgentController
 from runtime.loop import RuntimeLoop
 from runtime.scheduler import Scheduler
 from platform.router import Router
-from agents.interpreter import IntentInterpreter  # 如果你是 llm/interpreter.py 或别的位置就改
+from agents.interpreter import IntentInterpreter
 from agents.agent import Agent
 from events.store import EventStore
+from events.types import Event
 from events.query import EventQuery
 from agents.proposer import IntentionProposer, ProposerConfig  # 你现在的 proposer
 
@@ -23,7 +26,7 @@ class RuntimeConfig:
     policy_path: str
 
     enable_llm: bool = False
-    llm_client: Optional[object] = None   # 先占位
+    llm_client: Optional[object] = None  # 先占位
 
     # Router 纪律
     agent_cooldowns_sec: Optional[Dict[str, float]] = None
@@ -45,6 +48,45 @@ class AppRuntime:
     router: Router
     controller: AgentController
     loop: RuntimeLoop
+
+
+def _normalize_seed_event(seed: Any) -> Event:
+    """Ensure seed events are stored and broadcast consistently."""
+
+    if isinstance(seed, Event):
+        print(
+            "[runtime/bootstrap.py] 🌱 Seed 已是 Event 对象，直接复用：",
+            getattr(seed, "event_id", "<no-id>"),
+        )
+        return seed
+
+    if isinstance(seed, dict):
+        print(
+            "[runtime/bootstrap.py] 🌱 收到 dict 类型 seed，准备规范化：",
+            seed,
+        )
+        try:
+            ev = Event(
+                event_id=seed.get("event_id", str(uuid4())),
+                type=seed["type"],
+                timestamp=seed.get("timestamp", datetime.now(UTC).isoformat()),
+                sender=seed["sender"],
+                scope=seed.get("scope", "public"),
+                content=seed.get("content", {}),
+                references=seed.get("references", []),
+                recipients=seed.get("recipients", []),
+                metadata=seed.get("metadata", {}),
+                completed=seed.get("completed", True),
+            )
+            print(
+                "[runtime/bootstrap.py] ✅ 规范化完成，生成 Event：",
+                ev.event_id,
+            )
+            return ev
+        except KeyError as exc:
+            raise ValueError(f"Seed event dict 缺少必要字段：{exc}") from exc
+
+    raise TypeError(f"不支持的种子事件类型：{type(seed)}")
 
 
 def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
@@ -99,7 +141,9 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     # === 注入 seed events（Boss 或测试用）===
     if cfg.seed_events:
         for e in cfg.seed_events:
-            world.emit(e)
+            ev = _normalize_seed_event(e)
+            store.append(ev)
+            world.emit(ev)
         print(f"[runtime/bootstrap.py] 🌱 预置种子事件 {len(cfg.seed_events)} 条已注入世界。")
     else:
         print("[runtime/bootstrap.py] 🌱 没有预置种子事件，等待运行时自然生成。")

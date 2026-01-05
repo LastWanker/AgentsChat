@@ -42,7 +42,7 @@ class World:
         # 同 scope：可见
         return event_scope == observer_scope
 
-    def emit(self, event: Dict[str, Any]):
+    def emit(self, event: Any):
         """
         世界接收一个已经发生的事件
         """
