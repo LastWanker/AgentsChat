@@ -1,97 +1,54 @@
+# AgentsChat（事件驱动多智能体实验场）
 
-> Agent们的聊天群，他们会创造些什么？
+围绕“事件-意向”闭环搭建的多智能体协作沙盒。每个 Agent 只声明意向（Intention），由解释器审查后转换为事件（Event），再由世界（World）广播并触发下一轮提案。当前实现专注于规则驱动与基础调度，LLM 接入点与策略文件已预留。
 
-这是一个以“事件”为核心的数据驱动多智能体协作实验场。仓库实现了从事件生成、意向提案、解释与路由到世界广播的闭环；配套的 zProposal 文档收录了阶段性规划与设计思考，为后续演进指明路线。以下内容提供当前目录概览、核心概念、运行方式以及里程碑计划。
+## 系统运行概览
 
-## 目录总览
+1. **启动入口**：`main.py` 解析命令行，创建 BOSS/Alice/Bob 三人小队，生成一个 `request_anyone` 种子事件，并构建 `RuntimeConfig`。【F:main.py†L3-L90】
+2. **装配运行时**：`runtime/bootstrap.py` 依据配置组装世界、事件存储、意向提案器、解释器、路由器、调度器与主循环，并把 Agent/Controller 作为观察者接入世界。【F:runtime/bootstrap.py†L13-L142】【F:runtime/bootstrap.py†L166-L214】
+3. **事件触发与观测**：世界记录事件并按可见性通知观察者。AgentObserver 会把可见事件写入 Agent 记忆，AgentController 用它们触发下一轮意向生成。【F:platform/world.py†L6-L61】
+4. **意向生成**：Controller 为特定事件选人并调用 `IntentionProposer`。规则模式下，针对请求类事件生成 `submit` 意向，或在允许时对 `speak` 事件给出讨论回复。【F:agents/controller.py†L12-L96】【F:agents/proposer.py†L32-L100】
+5. **裁决与路由**：Router 调用 `IntentInterpreter` 按 YAML 策略检查必填字段、引用、禁止条件等；通过后把意向映射为事件并写入存储与世界，期间应用冷却防刷屏。【F:platform/router.py†L36-L104】【F:agents/interpreter.py†L115-L213】
+6. **调度循环**：`runtime/loop.py` 逐 tick 从调度器取出等待中的意向，调用 Router 处理；若队列为空则提前结束。【F:runtime/loop.py†L1-L33】
 
-| 路径 | 说明 |
-| --- | --- |
-| `main.py` | 程序入口，启动事件循环与核心组件。 |
-| `Intention` | 占位文件，用于表征意向数据结构的命名锚点。 |
-| `List[Intention]` | 占位文件，标记“意向列表”类型。 |
-| `agents/` | 智能体相关实现（身份、行为、提案、解释、策略）。 |
-| `agents/agent.py` | Agent 数据模型与所有事件构造方法（speak、request、submit 等）。 |
-| `agents/controller.py` | 处理事件输入、调度提案/动作的控制层。 |
-| `agents/proposer.py` | 负责根据触发事件生成意向（包含无 LLM 降级）。 |
-| `agents/interpreter.py` | 对意向进行裁决/解释，产出可执行事件。 |
-| `agents/policies.py` | Agent 层策略封装与约束定义。 |
-| `platform/` | 协作平台内核：世界态、路由与观测接口。 |
-| `platform/world.py` | 管理全局事件状态、可见域与广播逻辑。 |
-| `platform/router.py` | 事件分发与路由规则，保证唯一事件出口。 |
-| `platform/observers.py` | 观察者接口，用于 UI、日志或 Agent 监听。 |
-| `platform/observers4debug.py` | 调试友好的观察者实现。 |
-| `platform/intention.py` | 意向数据结构与约束。 |
-| `events/` | 事件类型与存储、检索接口。 |
-| `events/types.py` | 事件协议、字段定义与约束。 |
-| `events/store.py` | 事件持久化/缓存接口。 |
-| `events/query.py` | 历史事件检索工具。 |
-| `llm/` | 大模型接入封装。 |
-| `llm/client.py` | LLM API 客户端与降级策略。 |
-| `llm/prompts.py` | Prompt 模板与提示工程收集。 |
-| `llm/schemas.py` | LLM 输出的结构化校验。 |
-| `runtime/` | 运行时循环与调度。 |
-| `runtime/loop.py` | 事件驱动主循环，串联 proposer/interpret/router。 |
-| `runtime/scheduler.py` | 发言与动作的调度器。 |
-| `ui/console.py` | 控制台 UI 展示，基于观察者更新。 |
-| `config/settings.py` | 全局配置项，集中管理参数。 |
-| `policies/` | YAML 格式的策略配置。 |
-| `policies/intent_constraint.yaml` | 意向约束策略。 |
-| `policies/intent_evaluation.yaml` | 意向评估策略。 |
-| `policies/intent_proposal.yaml` | 意向生成策略。 |
-| `policies/intent_attribution.yaml` | 贡献归因策略草案。 |
-| `test/` | 简单的回归/单元测试样例。 |
-| `test/test4agent_observe.py` | Agent 观察与可见性测试。 |
-| `test/test4world.py` | 世界状态与事件传播测试。 |
-| `test/test4demo1_without_llm.py` | 无 LLM 的端到端 demo 测试。 |
-| `legacy/` | 早期版本的控制器与解释器保留代码。 |
-| `zProposal/` | 设计提案与路线文档。 |
-| `zProposal/demo之后的计划.txt` | v0.3 闭环计划：引入 proposer、统一事件出口。 |
-| `zProposal/埋下的坑.txt` | 风险提示与节流、去重、预算等未来工作。 |
-| `zProposal/简略版任务书.txt` | 项目概述、目标与技术路线。 |
-| `zProposal/一些展望.docx` | 后续展望（DOCX）。 |
-| `zProposal/第一阶段任务书.docx` | 第一阶段任务书（DOCX）。 |
+## 核心数据结构
 
-## 项目理念与核心概念
+- **Intention**：Agent 的待执行声明，包含 `kind`、`payload`、`scope`、引用等字段，状态字段用于路由与冷却处理。【F:events/types.py†L13-L36】
+- **Event**：进入世界的事实记录，包括事件类型、发送方、作用域、内容、引用、接收者及完成状态。【F:events/types.py†L38-L52】
+- **Decision**：解释器对意向的裁决结果（approved/suppressed），附带违例列表。【F:events/types.py†L54-L64】
+- **Reference**：事件引用格式与权重字段，`normalize_references` 会对 id 进行规范化。【F:events/types.py†L10-L20】【F:events/references.py†L1-L63】
 
-- **事件优先**：一切外显行为都以 `Event` 记录，强调可见性与可追溯性，引用（`references`）串联协作脉络。
-- **意向入队**：Agent 不直接发事件，而是提交 `Intention`，由解释器与路由裁决后进入世界，确保“先纪律，后智能”。【F:zProposal/demo之后的计划.txt†L10-L41】
-- **克制的 Agent**：Agent 只声明行为，不解释历史，避免隐式耦合；引用的权重与完成状态留待后续归因与计算处理。【F:agents/agent.py†L12-L86】
-- **可插拔策略**：通过 `policies/` 与 `agents/policies.py` 保持约束与评价的可配置性，为节流、去重、预算等机制预留空间。【F:zProposal/埋下的坑.txt†L1-L28】
+## 组件说明
 
-## 工作流速览（v0.3 目标）
+- **Agent**（`agents/agent.py`）：提供构造各类事件/意向的便捷方法（speak/request/submit 等），并维护记忆、身份、可见域等元数据。【F:agents/agent.py†L1-L152】
+- **AgentController**（`agents/controller.py`）：作为世界观察者挑选合适的 Agent 产生意向，并维护待处理队列，可注入事件查询以提供最近/引用上下文。【F:agents/controller.py†L12-L123】【F:agents/controller.py†L131-L183】
+- **IntentionProposer**（`agents/proposer.py`）：规则模式默认仅响应请求类事件（submit）或对发言做冷静讨论；预留 LLM 模式入口与冷却/裁剪策略。【F:agents/proposer.py†L32-L116】
+- **IntentInterpreter**（`agents/interpreter.py`）：解析 YAML 策略，支持必填字段、引用数量/类型检查，以及禁用表达式的安全求值；允许在未安装 PyYAML 时开启空策略模式。【F:agents/interpreter.py†L77-L143】【F:agents/interpreter.py†L169-L238】
+- **Router**（`platform/router.py`）：执行冷却检查、调用解释器、把通过的意向转换为事件写入存储与世界，并记录时间间隔用于节流。【F:platform/router.py†L8-L104】
+- **World**（`platform/world.py`）：维护事件时间线与 id 索引，并按作用域向观察者广播。【F:platform/world.py†L6-L58】
+- **Scheduler**（`runtime/scheduler.py`）：根据意向状态与冷却字段选择下一条可执行意向，避免提前处理被推迟的项。【F:runtime/scheduler.py†L1-L66】
+- **事件存储/查询**：`events/store.py` 将事件持久化到指定数据目录并记录 session 元数据；`events/query.py` 提供最近事件检索用于 proposer。【F:events/store.py†L1-L116】【F:events/query.py†L1-L49】
+- **观察者**：`platform/observers.py` 定义基本接口，`ui/console.py` 提供控制台输出示例，`platform/request_tracker.py` 监听请求并在完成时广播对应事件。【F:platform/observers.py†L1-L52】【F:ui/console.py†L1-L49】【F:platform/request_tracker.py†L1-L92】
 
-1. **事件触发**：外部或种子事件被世界看见。
-2. **意向提案**：`agents/proposer.py` 根据触发事件生成 `Intention`（可先用规则，后接入 LLM）。
-3. **排队与裁决**：`agents/controller.py` 将意向入队，`agents/interpreter.py` 结合策略进行裁决、补全或拒绝。
-4. **路由与广播**：`platform/router.py` 作为唯一事件出口写入事件，`platform/world.py` 负责广播到可见域。
-5. **观测与界面**：`ui/console.py` 等观察者实时展示事件流。
+## 运行与配置
 
-该闭环对应 zProposal 中的“最小闭环”任务：Event → Proposer → Interpreter → Router → World。后续会在 proposer 前加入上下文检索，给 LLM 提供“最近 N 条”参考以提升生成质量。【F:zProposal/demo之后的计划.txt†L1-L41】
+- 依赖：PyYAML 可选，用于解析策略；未安装时可通过 `--allow-empty-policy` 运行空策略。
+- 运行示例：
+  ```bash
+  python main.py --policy policies/intent_constraint.yaml --max-ticks 50 \
+    --data-dir data/sessions --enable-llm   # enable_llm 仅打开开关，占位接口
+  ```
+  日志会展示各阶段装配、意向生成、路由与广播情况。
+- Session 与落盘：事件存储默认写入 `data/sessions/<session_id>`，带 metadata 与事件记录；可用 `--session-id` 强制命名或 `--resume` 继续已有 session。【F:runtime/bootstrap.py†L64-L98】【F:events/store.py†L11-L81】
+- 策略：`policies/intent_constraint.yaml` 定义意向种类的 require/forbid 规则；其它 YAML 为评估/提案/归因草案，可根据需要扩充。
 
-## 设计思路摘录
+## 测试与演示
 
-- **防刷屏策略**：当前默认对普通 `speak` 不提议，优先处理 `request_anyone/request_specific` 等明确需要回应的事件，待节流/去重/预算后再放开。【F:zProposal/埋下的坑.txt†L1-L28】
-- **可解释的贡献归因**：事件图将支撑未来的贡献度计算与可视化，结合 `policies/intent_attribution.yaml` 与 zProposal 的“多维度评估”愿景。【F:zProposal/简略版任务书.txt†L1-L33】
-- **松耦合架构**：LLM、策略、存储均可替换；`llm/client.py` 提供降级策略，`events/store.py`/`query.py` 抽象存储与查询，为后续引入向量检索留接口。
+- 快速端到端：`python -m test.test4demo1_without_llm` 会运行无 LLM 的最小闭环。 
+- 其它检查：`test/test4agent_observe.py` 验证世界可见性与 Agent 观察行为，`test/test4world.py` 覆盖事件存储与广播，`test/test_main_runtime_flow.py` 跑通装配与循环流程。【F:test/test4demo1_without_llm.py†L1-L68】【F:test/test4agent_observe.py†L1-L59】【F:test/test4world.py†L1-L85】【F:test/test_main_runtime_flow.py†L1-L106】
 
-## 使用建议
+## 扩展思路
 
-1. 创建/配置 `config/settings.py` 中的必要参数（LLM Key、调度频率等）。
-2. 在 `main.py` 中注册所需 Agent、策略与观察者，随后启动事件循环。
-3. 运行测试或示例：
-   ```bash
-   python -m test.test4demo1_without_llm
-   ```
-   或按需扩展更多脚本。
-
-## 路线图（摘自 zProposal）
-
-- **v0.3**：补齐 proposer，确保“意向入队”成为唯一动力，跑通最小闭环。【F:zProposal/demo之后的计划.txt†L1-L41】
-- **v0.31/0.32**：加入节流（cooldown）、去重（dedupe）、预算（budget）、优先级（priority），防止 speak 链刷屏。【F:zProposal/埋下的坑.txt†L1-L28】
-- **v0.4**：LLM 驱动的 proposer，结合事件查询提供上下文记忆；引入基础贡献度评估。 
-- **更远期**：图算法驱动的贡献归因、可视化报告，以及与向量库/图数据库的结合，形成科研与工程并重的多 Agent 协作平台。【F:zProposal/简略版任务书.txt†L1-L33】
-
-## 贡献
-
-欢迎通过 Issue/PR 讨论设计或提交实现，尤其是围绕 proposer 细化、策略完善、事件图算法与可视化的贡献。提交代码前请结合策略文件与 zProposal 的路线思考整体一致性。
+- 在 `agents/proposer.py` 的 `_propose_with_llm` 内接入实际大模型并利用 `ProposerContext` 提供的最近/引用事件上下文。
+- 增强冷却与优先级：`platform/router.py` 已有 CooldownGuard，可结合 `RuntimeConfig.agent_cooldowns_sec` 与 `inter_event_gap_sec` 调整节奏。【F:platform/router.py†L8-L34】【F:runtime/bootstrap.py†L103-L128】
+- 策略迭代：利用 YAML 规则继续丰富 require/forbid 条件，或在解释器中加入 rewrite/downgrade 逻辑以实现更智能的裁决链。
