@@ -93,18 +93,13 @@ class AgentController:
                     picked.append(a)
             return picked
 
-        # ---- request_anyone：排除 sender，按 priority 排第一 ----
+        # ---- request_anyone：排除 sender，所有符合可见性的 Agent 都可响应 ----
         if etype == "request_anyone":
             cands = [
                 a for a in self.agents
                 if a.id != sender_id and self._is_visible(scope, a.scope)
             ]
-            if not cands:
-                return []
-
-            # legacy：priority 高优先
-            cands.sort(key=lambda x: getattr(x, "priority", 0.0), reverse=True)
-            return [cands[0]]
+            return cands
 
         # 默认：其它事件不派生（避免刷屏）
         return []
