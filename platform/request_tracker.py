@@ -112,8 +112,9 @@ class RequestCompletionObserver:
     # ===== 完成后的广播 =====
     def _emit_completion_announcement(self, request: Event, submits: List[Event]) -> None:
         submit_ids = [ev.event_id for ev in submits]
+        summary = self._summarize_submit_stances(request, submits)
         text = (
-            f"{request.type} {request.event_id} 已被提交完成（{len(submit_ids)} 次 submit）。"
+            f"{request.type} {request.event_id} 已被提交完成（{len(submit_ids)} 次 submit）。{summary}"
         )
         completion_event = new_event(
             sender=self.id,
@@ -128,3 +129,33 @@ class RequestCompletionObserver:
         print(
             f"[platform/request_tracker.py] 🎉 request {request.event_id} 已闭合，发布 completion speak_public。"
         )
+
+    def _summarize_submit_stances(self, request: Event, submits: List[Event]) -> str:
+        request_text = ""
+        if isinstance(request.content, dict):
+            req = request.content.get("request")
+            if req:
+                request_text = f"，针对请求：{req}"
+
+        agent_names = {getattr(a, "id", None): getattr(a, "name", None) for a in self.agents}
+
+        parts: List[str] = []
+        total_stance = 0.0
+        for submit in submits:
+            stance = self._extract_stance(submit.references, request.event_id)
+            total_stance += stance
+            name = agent_names.get(submit.sender) or submit.sender
+            parts.append(f"执行者：{name}（stance: {stance:+.1f}）")
+
+        verdict = "通过词条" if total_stance > 0 else "未通过词条"
+        participants = "；".join(parts) if parts else "执行者未知"
+        return f"{participants}；最终得分：{total_stance:+.1f}；{verdict}{request_text}。"
+
+    def _extract_stance(self, references: List, target_id: str) -> float:
+        for ref in references or []:
+            if ref_event_id(ref) != target_id:
+                continue
+            weight = getattr(ref, "weight", None) or ref.get("weight") if isinstance(ref, dict) else None
+            if isinstance(weight, dict) and weight.get("stance") is not None:
+                return float(weight.get("stance"))
+        return 0.0

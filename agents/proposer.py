@@ -38,7 +38,7 @@ class ProposerHints:
 @dataclass
 class ProposerConfig:
     enable_llm: bool = False        # 是否启用 LLM
-    allow_speak_replies: bool = False
+    allow_speak_replies: bool = True
 
     max_intentions_per_event: int = 2
 
@@ -94,49 +94,44 @@ class IntentionProposer:
         event_id = event.get("event_id")
         # payload = event.get("payload") or {}
         payload = event.get("payload") or event.get("content") or {}
+        event_scope = event.get("scope") or context.scope or "public"
 
         refs = [event_id] if event_id else []
 
         intentions: List[Intention] = []
         hints = ProposerHints()
 
-        if etype == "request_anyone":
-            req = payload.get("request")
-            text = self._simple_request_reply(req)
-            intentions.append(
-                Intention(
-                    intention_id=str(uuid4()),
-                    agent_id=context.agent_id,  # 这里要从 Controller 传进来
-                    kind="speak",
-                    payload={"text": text},
-                    scope=context.scope or "public",
-                    candidate_references=refs,
-                    references=refs,
-                    completed=False,
+        if etype in ("request_anyone", "request_specific", "request_all"):
+            if self._should_submit_for_request(event_scope, etype, context):
+                intentions.append(
+                    Intention(
+                        intention_id=str(uuid4()),
+                        agent_id=context.agent_id,  # 这里要从 Controller 传进来
+                        kind="submit",
+                        payload={},
+                        scope=event_scope,
+                        candidate_references=refs,
+                        references=refs,
+                        completed=True,
+                    )
                 )
-            )
-
-        elif etype == "request_specific":
-            req = payload.get("request")
-            text = self._simple_direct_reply(req)
-            intentions.append(
-                Intention(
-                    intention_id=str(uuid4()),
-                    agent_id=context.agent_id,  # 这里要从 Controller 传进来
-                    kind="speak",
-                    payload={"text": text},
-                    scope=context.scope or "public",
-                    candidate_references=refs,
-                    references=refs,
-                    completed=False,
-                )
-            )
 
         elif etype in ("speak", "speak_public"):
             if self.config.allow_speak_replies:
-                # v0.31+: 这里才允许讨论/纠错
-                pass
-            # v0.3 默认不派生，防刷屏
+                intentions.append(
+                    Intention(
+                        intention_id=str(uuid4()),
+                        agent_id=context.agent_id,
+                        kind="speak",
+                        payload={
+                            "text": self._simple_discussion_reply(payload.get("text"))
+                        },
+                        scope=context.scope or event_scope,
+                        candidate_references=refs,
+                        references=refs,
+                        completed=True,
+                    )
+                )
 
         return intentions, hints
 
@@ -167,13 +162,23 @@ class IntentionProposer:
 
         return intentions
 
-    # ---------- dumb 文本生成 ----------
-    def _simple_request_reply(self, request: Optional[str]) -> str:
-        if request:
-            return f"我可以试着处理一下：{request}"
-        return "我可以试着处理这个请求。"
+    def _simple_discussion_reply(self, text: Optional[str]) -> str:
+        if text:
+            return f"收到发言，基于实时时间冷却后给出讨论：{text}"
+        return "收到发言，基于实时时间冷却后给出讨论意见。"
 
-    def _simple_direct_reply(self, request: Optional[str]) -> str:
-        if request:
-            return f"收到，我来回应：{request}"
-        return "收到，我来回应这个请求。"
+    def _should_submit_for_request(
+            self, event_scope: str, etype: str, context: ProposerContext
+    ) -> bool:
+        if etype == "request_all":
+            if self._is_boss(context):
+                return False
+            if event_scope != "public" and context.scope != event_scope:
+                return False
+        return True
+
+    def _is_boss(self, context: ProposerContext) -> bool:
+        for value in (context.agent_role, context.agent_name, context.agent_id):
+            if value and str(value).upper() == "BOSS":
+                return True
+        return False

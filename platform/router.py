@@ -107,8 +107,10 @@ class Router:
             intention.deferred_until_time = defer_time if defer_time is not None else now + 0.1
             intention.status = "pending"
             return Decision(status="suppressed", violations=cooldown_violations)
+        payload_preview = self._format_payload_preview(intention)
         print(
             f"[platform/router.py] 📨 收到 {agent.name} 的意向 {intention.intention_id}，先让解释器看看。"
+            + (f" payload: {payload_preview}" if payload_preview else "")
         )
         decision: Decision = self.interpreter.interpret_intention(intention, agent, self.world, self.store)
         if decision.status != "approved":
@@ -121,6 +123,7 @@ class Router:
         event = self._intention_to_event(intention, agent)
         print(
             f"[platform/router.py] ✅ 意向 {intention.intention_id} 通过，转换成事件 {event.event_id}，准备广播。"
+            + (f" payload: {payload_preview}" if payload_preview else "")
         )
         self.store.append(event)
         # self.world.emit(event.__dict__)  # 兼容你现有 World.emit(dict)
@@ -129,6 +132,19 @@ class Router:
         self.cooldown_guard.record_success(agent.id, tick_index, now=now)
         print(f"[platform/router.py] 📣 事件 {event.event_id} 已送入世界，大家随意围观。")
         return decision
+
+    def _format_payload_preview(self, intention: Intention) -> Optional[str]:
+        payload = intention.payload or {}
+        if not isinstance(payload, dict):
+            return str(payload)
+        for key in ("result", "text", "request"):
+            if key in payload and payload[key]:
+                value = payload[key]
+                text = str(value)
+                return text if len(text) <= 120 else text[:117] + "..."
+        if payload:
+            return str(payload)
+        return None
 
     def _intention_to_event(self, intention: Intention, agent) -> Event:
         # 最小映射：kind -> event.type, payload -> content
