@@ -98,6 +98,19 @@ def _normalize_seed_event(seed: Any) -> Event:
 
 
 def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
+    def _normalize_agent_cooldowns(
+        cooldowns_sec: Optional[Dict[str, float]], agents: List[Agent]
+    ) -> Dict[str, float]:
+        if not cooldowns_sec:
+            return {}
+
+        name_to_id = {ag.name: ag.id for ag in agents}
+        normalized: Dict[str, float] = {}
+        for key, value in cooldowns_sec.items():
+            agent_id = name_to_id.get(key, key)
+            normalized[agent_id] = value
+        return normalized
+
     # === 底座 ===
     session_meta = {
         "policy_path": cfg.policy_path,
@@ -138,11 +151,12 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
 
     # === Scheduler/Router/Controller/Loop ===
     scheduler = Scheduler()
+    cooldowns_sec = _normalize_agent_cooldowns(cfg.agent_cooldowns_sec, cfg.agents)
     router = Router(
         world=world,
         store=store,
         interpreter=interpreter,
-        cooldowns_sec=cfg.agent_cooldowns_sec or {},
+        cooldowns_sec=cooldowns_sec,
         inter_event_gap_sec=cfg.inter_event_gap_sec,
     )
     controller = AgentController(
