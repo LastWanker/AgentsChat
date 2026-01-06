@@ -6,6 +6,8 @@ import re
 from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+from events.references import ref_event_id
+
 _ALLOWED_CALLS = {"abs", "len", "is_empty", "get"}
 
 
@@ -339,11 +341,11 @@ class IntentInterpreter:
             cur = cur[part]
         return True
 
-    def _any_ref_type_in(self, refs: List[str], allowed_types: List[str], store) -> bool:
+    def _any_ref_type_in(self, refs: List, allowed_types: List[str], store) -> bool:
         if store is None:
             raise RuntimeError("store missing")
-        for rid in refs:
-            ev = store.get(rid)
+        for ref in refs:
+            ev = store.get(ref_event_id(ref))
             if not ev:
                 continue
             # ev 可能是 dataclass，也可能是 dict
@@ -356,7 +358,7 @@ class IntentInterpreter:
         referenced_event = None
         refs = it.get("references") or []
         if refs and store:
-            referenced_event = store.get(refs[0])
+            referenced_event = store.get(ref_event_id(refs[0]))
         rev = _to_dict(referenced_event)
 
         globals_block = (self.policy.get("globals") or {}) if hasattr(self, "policy") else {}

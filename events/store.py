@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import uuid4
 
+from .references import normalize_references
 from .types import Event
 
 
@@ -68,6 +69,11 @@ class EventStore:
         )
 
     def append(self, event: Event) -> None:
+        try:
+            event.references = normalize_references(getattr(event, "references", []) or [])
+        except Exception:
+            pass
+
         offset, length = self._append_event_to_file(event)
         self._index[event.event_id] = self._index_entry(event, offset, length)
         self._persist_index()

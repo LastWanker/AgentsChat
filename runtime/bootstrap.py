@@ -16,6 +16,7 @@ from agents.interpreter import IntentInterpreter
 from agents.agent import Agent
 from events.store import EventStore
 from events.types import Event
+from events.references import normalize_references
 from events.query import EventQuery
 from agents.proposer import IntentionProposer, ProposerConfig  # 你现在的 proposer
 
@@ -79,7 +80,7 @@ def _normalize_seed_event(seed: Any) -> Event:
                 sender=seed["sender"],
                 scope=seed.get("scope", "public"),
                 content=seed.get("content", {}),
-                references=seed.get("references", []),
+                references=normalize_references(seed.get("references", [])),
                 recipients=seed.get("recipients", []),
                 metadata=seed.get("metadata", {}),
                 completed=seed.get("completed", True),

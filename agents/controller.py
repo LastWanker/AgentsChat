@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import List, Optional, Dict, Any
 from uuid import uuid4
 
+from events.references import ref_event_id
 from events.types import Intention
 from agents.proposer import IntentionProposer, ProposerContext, ProposerConfig
 
@@ -120,8 +121,8 @@ class AgentController:
         if self.store is not None:
             try:
                 refs = trigger_event.get("references") or []
-                for rid in refs[:10]:
-                    ev = self.store.get(rid)
+                for r in refs[:10]:
+                    ev = self.store.get(ref_event_id(r))
                     if ev:
                         referenced.append(ev.__dict__ if hasattr(ev, "__dict__") else dict(ev))
             except Exception:

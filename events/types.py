@@ -1,18 +1,21 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 from uuid import uuid4
 from datetime import datetime, UTC
 
 Scope = str  # "public" or "group:<id>"
 
 
-class WeightedReference(TypedDict):
-    event_id: str
-    weight: float
+class RefWeight(TypedDict, total=False):
+    stance: float  # [-1, 1] 认可/反对（投票、评价）
+    inspiration: float  # [0, 1] 启发度（被点醒程度）
+    dependency: float  # [0, 1] 依赖度（数据/知识依赖）
 
 
-Reference = Union[str, WeightedReference]
+class Reference(TypedDict, total=False):
+    event_id: str  # 必填
+    weight: RefWeight  # 可省略，省略视为 0 权重
 
 
 @dataclass

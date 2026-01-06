@@ -1,8 +1,8 @@
 # agent.py
 from uuid import uuid4
 from datetime import datetime, UTC
-from typing import List, Optional, TypedDict, Dict, Any, Union
-# 最后一次修改时间：2026年1月2日 17:49:28
+from typing import List, Optional, Dict, Any
+# 最后一次修改时间：2026年1月6日 16:23:39
 
 """
 ☆agent结构设计思路↓
@@ -26,8 +26,7 @@ Event 不是日志，也不是函数调用记录，而是社会意义上的“�
 
 关于 Reference 的设计
 Event 之间的关系，不通过上下文、不通过隐式状态，而是显式通过 reference 建立。
-Reference 被设计成可以是：
-    一个 event_id（默认权重为 1），或一个带权重的引用（WeightedReference）
+☆ ♥♥♥♥♥ Reference 只保留一种结构：带有 event_id 和三维权重（stance / inspiration / dependency）的对象。
 这样做的目的不是为了复杂，而是为了保留一个事实：
     很多行为在发生时，并没有被完全定性。
 评价、赞同、反对、贡献大小，这些都不必在行为发生当下就被锁死。
@@ -174,12 +173,8 @@ Agent 不聪明没关系，
 """
 
 
-class WeightedReference(TypedDict):
-    event_id: str
-    weight: float
-
-
-Reference = Union[str, WeightedReference]
+from events.references import default_ref_weight
+from events.types import Reference
 
 
 class Agent:
@@ -368,16 +363,19 @@ class Agent:
             comment: str,
             references: List[Reference],
     ):
-        weighted_refs: List[WeightedReference] = []
+        weighted_refs: List[Reference] = []
 
-        for r in references:
-            if isinstance(r, str):
-                weighted_refs.append({
-                    "event_id": r,
-                    "weight": score,
-                })
-            else:
-                weighted_refs.append(r)
+        for ref in references:
+            if isinstance(ref, str):
+                weight = default_ref_weight()
+                weight["stance"] = score
+                weighted_refs.append({"event_id": ref, "weight": weight})
+                continue
+
+            weight = default_ref_weight()
+            weight.update(ref.get("weight", {}))
+            weight["stance"] = score
+            weighted_refs.append({"event_id": ref["event_id"], "weight": weight})
 
         return self._new_event(
             "evaluation",
