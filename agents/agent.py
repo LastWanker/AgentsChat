@@ -2,6 +2,7 @@
 from uuid import uuid4
 from datetime import datetime, UTC
 from typing import List, Optional, Dict, Any
+
 # 最后一次修改时间：2026年1月6日 16:23:39
 
 """
@@ -173,7 +174,7 @@ Agent 不聪明没关系，
 """
 
 
-from events.references import default_ref_weight
+from events.references import default_ref_weight, normalize_references
 from events.types import Reference
 
 
@@ -251,6 +252,13 @@ class Agent:
         # }
         # """
 
+    def _normalize_references(self, references: Optional[List[Reference | str]]) -> List[Reference]:
+        """Ensure outgoing references always use the weighted schema."""
+
+        if not references:
+            return []
+        return normalize_references(references)
+
     def _new_event(  # “_”表示：这是 Agent 的内部工具，外部不应该直接调用
             self,
             event_type: str,
@@ -258,7 +266,7 @@ class Agent:
             *,  # *,表示一个分隔符，它强制后续的参数必须通过关键字参数（keyword arguments）的方式传递，而不能通过位置参数（positional arguments）传递。
             recipients: Optional[List[str]] = None,
             # references: Optional[List[str]] = None,
-            references: Optional[List[Reference]] = None,
+            references: Optional[List[Reference | str]] = None,
             metadata: Optional[Dict[str, Any]] = None,
             completed: bool = True,
     ) -> Dict[str, Any]:
@@ -277,7 +285,7 @@ class Agent:
             "scope": scope,
 
             "content": content,
-            "references": references or [],
+            "references": self._normalize_references(references),
             "metadata": metadata,  # or {},
 
             "completed": completed,
@@ -290,7 +298,7 @@ class Agent:
 
     # ---------- 社会行为 ----------
     # ---------- 发言行为 ----------
-    def speak(self, text: str, references: Optional[List[Reference]] = None):
+    def speak(self, text: str, references: Optional[List[Reference | str]] = None):
         # 在当前 scope 发言
         return self._new_event(
             "speak",
@@ -298,7 +306,7 @@ class Agent:
             references=references,
         )
 
-    def speak_public(self, text: str, references: Optional[List[Reference]] = None):
+    def speak_public(self, text: str, references: Optional[List[Reference | str]] = None):
         # 无条件 public 广播
         return self._new_event(
             "speak_public",
@@ -340,7 +348,7 @@ class Agent:
     def submit(
             self,
             result: str,
-            references: List[Reference],
+            references: List[Reference | str],
             public: bool = False,
     ):
         if not references:
@@ -361,17 +369,11 @@ class Agent:
             self,
             score: float,
             comment: str,
-            references: List[Reference],
+            references: List[Reference | str],
     ):
         weighted_refs: List[Reference] = []
 
-        for ref in references:
-            if isinstance(ref, str):
-                weight = default_ref_weight()
-                weight["stance"] = score
-                weighted_refs.append({"event_id": ref, "weight": weight})
-                continue
-
+        for ref in self._normalize_references(references):
             weight = default_ref_weight()
             weight.update(ref.get("weight", {}))
             weight["stance"] = score
@@ -389,7 +391,7 @@ class Agent:
             self,
             new_state: str,
             *,
-            references: Optional[List[Reference]] = None,
+            references: Optional[List[Reference | str]] = None,
             note: Optional[str] = None,
             completed: bool = False,
             forced_scope: Optional[str] = None,
@@ -409,7 +411,7 @@ class Agent:
 
     # ---------- 分组行为 ----------
 
-    def join_group(self, group_id: str, references: List[Reference]):
+    def join_group(self, group_id: str, references: List[Reference | str]):
         """
         宣告：我将加入某个 group
         - 事件发生在进入 group 之前
@@ -431,7 +433,7 @@ class Agent:
 
         return event
 
-    def leave_group(self, references: List[Reference]):
+    def leave_group(self, references: List[Reference | str]):
         """
         宣告：我将离开当前 group
         同样是 public 事件

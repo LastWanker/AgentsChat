@@ -33,6 +33,11 @@ class Intention:
     deferred_until_tick: Optional[int] = None
     deferred_until_time: Optional[float] = None
 
+    def __post_init__(self):
+        from events.references import normalize_references
+
+        self.candidate_references = normalize_references(self.candidate_references or [])
+        self.references = normalize_references(self.references or [])
 
 @dataclass
 class Event:
@@ -55,10 +60,12 @@ class Decision:
 
 
 def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
-              references: Optional[List[Reference]] = None,
+              references: Optional[List[Reference | str]] = None,
               recipients: Optional[List[str]] = None,
               metadata: Optional[Dict[str, Any]] = None,
               completed: bool = True) -> Event:
+    from events.references import normalize_references
+
     return Event(
         event_id=str(uuid4()),
         type=type,
@@ -66,7 +73,7 @@ def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
         sender=sender,
         scope=scope,
         content=content,
-        references=references or [],
+        references=normalize_references(references or []),
         recipients=recipients or [],
         metadata=metadata or {},
         completed=completed,
