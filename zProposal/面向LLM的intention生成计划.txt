@@ -1,3 +1,29 @@
+1. 核心流程：到底是 “query 需要 intention” 还是 “intention 需要 query”？
+你说得更像人类的认知过程：先有意图，再翻旧账。
+我站你这边——但我会把它拆成两段，避免你付出巨大 token 代价：
+我建议的两段式（这是最稳的） IntentionDraft（不含 references）
+输入：最近 10~50 条事件（或更少）
+输出：kind + 要说什么/要做什么 + retrieval_plan（我要查什么）
+Query/Resolver（按 retrieval_plan 查）
+输出：候选 event_id 列表（以及必要的片段） FinalIntention（含 references + 自然语言）
+输入：draft + 查询到的证据
+输出：最终 intention（references 填满）+ 最终 speak 文本 这就把你说的“看最近 → 决定要翻哪些旧账 → 翻旧账 → 引用+发言”落成了工程流程。
+
+2.你担心的“每次都往前翻会很花钱”怎么解决？
+靠三件套，不玄学： 滚动摘要（scope 级别）：每个 scope（public / group:x）
+维护一个短摘要（几百 token），每次新事件进来，摘要增量更新。
+LLM 做 draft 时主要吃摘要，必要时再取最近 N 条原文。
+事件分层：原始事件是事实层；摘要是语义层；
+更高一层可以是“争议点列表 / TODO 列表 / 决策状态”。你这系统本来就适合做层次化记忆。
+缓存：同一个 scope 最近 N 条其实高度重叠；你可以缓存“最近窗口→草稿意图”的中间表示（至少在同一个 tick 内）。“
+
+针对intention的policy（告诉llm如何分两步产生这些用来生成一个良好intention的schema）
+有必要和针对event的intent_proposal.yaml也就是告诉llm你需要遵守的event类型的，这二者有必要放在一起吗？
+结论：强烈建议拆开。
+理由很简单：它们管的不是同一件事。
+事件类型 policy（intent_proposal.yaml）：是“世界允许你做什么”。它像法典/接口文档，稳定、慢变、面向系统。
+意向生成流程 policy（给 LLM 的两段式）：是“你应该怎么思考、怎么产出”。它像操作手册/驾驶指南，迭代会更快，而且很可能随模型版本/提示词策略频繁调整。
+
 下一步计划（现在该干什么）
 
 一个能直接推进代码结构的路线，按重要性排序：
