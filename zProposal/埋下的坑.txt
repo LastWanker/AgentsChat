@@ -26,7 +26,7 @@ proposer采用了无llm自动降级的操作，不知道是否可靠。
 
 四、怎么利用现有的系统动态管理一场chat，比如中途加入，Boss（也就是用户扮演的人）发言，等等？
 
-五、completed的默认有错误，其中speak上来是False。不确定其它的有没有。
+五、【已解决】completed的默认有错误，其中speak上来是False。不确定其它的有没有。
 
 六、
 1. 核心流程：到底是 “query 需要 intention” 还是 “intention 需要 query”？
@@ -48,5 +48,13 @@ FinalIntention（含 references + 自然语言）
 事件分层：原始事件是事实层；摘要是语义层；更高一层可以是“争议点列表 / TODO 列表 / 决策状态”。你这系统本来就适合做层次化记忆。
 缓存：同一个 scope 最近 N 条其实高度重叠；你可以缓存“最近窗口→草稿意图”的中间表示（至少在同一个 tick 内）。
 
-七、2.观察漏洞：request_all期待的回复现在可能包括了老板BOSS，可能需要老板的submit才能completed = true。应该默认不包含BOSS的。
+七、【已解决】2.观察漏洞：request_all期待的回复现在可能包括了老板BOSS，可能需要老板的submit才能completed = true。应该默认不包含BOSS的。
 
+八、【已解决】cood down机制目前并没有正确地让暂时被压制的intention重新回归队列，重新变成event，而是匆匆结束了，日志如下：
+[runtime/loop.py] 🎯 抽中了 Bob 的意向 0c06c961-124c-4032-8c6d-6db117cec0c5，类型是 submit。
+[platform/router.py] ⏳ Bob 的意向 0c06c961-124c-4032-8c6d-6db117cec0c5 触发 cooldown，暂不处理。
+[runtime/scheduler.py] ⚠️ 意向 0c06c961-124c-4032-8c6d-6db117cec0c5 仍在冷却 1.00s，本轮不调度。
+[runtime/scheduler.py] 🙅‍♂️ 队列空空如也，没啥可调度的。
+[runtime/loop.py] ⏸️ 队列里没人排队，说话暂停。
+[runtime/loop.py] 💤 没有新的意向要处理，提前收工。
+而且系统没有如预期那般根据冷却时间和现实时间慢吞吞的运行，还是一瞬间就完成运行了。

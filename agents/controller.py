@@ -13,13 +13,14 @@ class AgentController:
     """
     只负责观察 -> 产生意向 -> 入队，绝不直接向 World emit 事件。
     """
+
     def __init__(
-        self,
-        agents: List,
-        *,
-        proposer: Optional[IntentionProposer] = None,
-        store=None,   # EventStore，可选：用来给 proposer 喂 recent/ref
-        query=None,   # EventQuery，可选
+            self,
+            agents: List,
+            *,
+            proposer: Optional[IntentionProposer] = None,
+            store=None,  # EventStore，可选：用来给 proposer 喂 recent/ref
+            query=None,  # EventQuery，可选
     ):
         self.agents = agents
         self._by_id = {a.id: a for a in agents}
@@ -152,6 +153,16 @@ class AgentController:
     # ===== 队列接口 =====
     def pending(self) -> List[Intention]:
         return [x for x in self._queue if x.status == "pending"]
+
+    def prune_done(self) -> None:
+        """把已执行/被压制的意向移出队列，避免影响队列状态判断。"""
+
+        before = len(self._queue)
+        self._queue = [x for x in self._queue if x.status == "pending"]
+        if len(self._queue) != before:
+            print(
+                f"[agents/controller.py] 🧹 清理了 {before - len(self._queue)} 条已完成/被压制的意向，剩余 {len(self._queue)} 条待处理。"
+            )
 
     def pop_one(self) -> Intention | None:
         for x in self._queue:

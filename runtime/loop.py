@@ -7,8 +7,17 @@ class RuntimeLoop:
         self._tick_index = 0
 
     def tick(self):
-        it = self.scheduler.choose(self.controller, loop_tick=self._tick_index)
+        it, wait_sec = self.scheduler.choose(self.controller, loop_tick=self._tick_index)
         if it is None:
+            if wait_sec is not None:
+                print(
+                    f"[runtime/loop.py] ⏸️ 队列里没人立即可用，但有人在冷却，等待 {wait_sec:.2f}s 再试。"
+                )
+                if wait_sec > 0:
+                    import time
+
+                    time.sleep(wait_sec)
+                return True
             print(f"[runtime/loop.py] ⏸️ 队列里没人排队，说话暂停。")
             return False
 
@@ -18,6 +27,13 @@ class RuntimeLoop:
             f"[runtime/loop.py] 🎯 抽中了 {agent.name} 的意向 {it.intention_id}，类型是 {it.kind}。"
         )
         self.router.handle_intention(it, agent, tick_index=self._tick_index)
+
+        if it.status == "pending":
+            # 被冷却/延期，重新排回队尾等待下次调度
+            self.controller._queue.append(it)
+            print(
+                f"[runtime/loop.py] 🔁 意向 {it.intention_id} 因冷却被暂缓，已重新入队等待下一轮。"
+            )
         self._tick_index += 1
         return True
 

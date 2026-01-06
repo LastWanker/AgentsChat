@@ -64,8 +64,8 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         session_id=args.session_id,
         resume_session_id=args.resume,
         agent_cooldowns_sec={
-            "Alice": 2.0,
-            "Bob": 2.0,
+            "Alice": 1.5,
+            "Bob": 1.5,
         },
         inter_event_gap_sec=1.0,
         seed_events=[seed],
