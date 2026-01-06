@@ -20,14 +20,25 @@ class ReferenceResolver:
         candidates: List[Reference] = []
         seen: set[str] = set()
 
+        draft_id = getattr(draft, "intention_id", None) or "<no-id>"
+        print(
+            f"[events/reference_resolver.py] 🔍 准备执行两段式的引用解析，草稿 {draft_id} 有 {len(draft.retrieval_plan)} 条检索指令。"
+        )
         for instruction in draft.retrieval_plan:
             scope = instruction.scope or draft.target_scope
+            print(
+                f"[events/reference_resolver.py] 📡 执行检索指令 {instruction.name}，scope={scope or '<default>'}, keywords={instruction.keywords or '-'}, after_event_id={instruction.after_event_id or '-'}, thread_depth={instruction.thread_depth}."
+            )
             events = self._execute_instruction(instruction, scope)
             for ev in events:
                 if ev.event_id in seen:
                     continue
                 seen.add(ev.event_id)
                 candidates.append({"event_id": ev.event_id, "weight": default_ref_weight()})
+
+        print(
+            f"[events/reference_resolver.py] 🧮 检索完成，草稿 {draft_id} 收集到 {len(candidates)} 条候选引用（去重后）。"
+        )
 
         return normalize_references(candidates)
 

@@ -43,8 +43,14 @@ class RuntimeLoop:
         if isinstance(it, IntentionDraft):
             if self.finalizer is None:
                 raise RuntimeError("RuntimeLoop 缺少 finalizer，无法处理 IntentionDraft。")
+            print(
+                f"[runtime/loop.py] 🔍 发现草稿 {it.intention_id}，进入两段式流程：先交给 finalizer 解析引用再路由。"
+            )
             intention_for_router = self.finalizer.finalize(
                 it, agent_id=agent.id, intention_id=it.intention_id
+            )
+            print(
+                f"[runtime/loop.py] ✅ 草稿 {it.intention_id} 完成 final 阶段，已转换成可路由的意向。"
             )
 
         self.router.handle_intention(intention_for_router, agent, tick_index=self._tick_index)

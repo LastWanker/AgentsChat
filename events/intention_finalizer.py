@@ -17,7 +17,15 @@ class IntentionFinalizer:
         if not draft.retrieval_plan:
             raise ValueError("DraftIntention 缺少 retrieval_plan，无法生成可追溯引用。")
 
+        print(
+            f"[events/intention_finalizer.py] 🧭 进入两段式生成的第二段：为草稿 {intention_id} 解析引用。",
+            f"检索计划 {len(draft.retrieval_plan)} 条。",
+        )
         candidate_refs = self.resolver.resolve(draft)
+
+        print(
+            f"[events/intention_finalizer.py] 🏁 草稿 {intention_id} 的引用解析完成，拿到 {len(candidate_refs)} 条候选引用。",
+        )
 
         # Final 阶段：references 必须来自 resolver 返回的候选 event_id
         final = FinalIntention(
