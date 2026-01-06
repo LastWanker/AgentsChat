@@ -1,0 +1,46 @@
+# Intent production policy: two-phase workflow for LLM/非LLM 兼容
+# 拆分自 intent_proposal.yaml，专注于“怎么想/怎么写”，而不是世界允许哪些事件类型。
+
+schema:
+  draft:
+    description: >-
+      IntentionDraft 只关心“做什么”和“要查什么”，禁止出现 references。
+      输出 message_plan + retrieval_plan，必要时注明 target_scope/visibility。
+    fields:
+      kind: speak | submit | evaluation | ...
+      message_plan: 简述计划的动作或回复要点，不是最终成文。
+      retrieval_plan:
+        - name: 描述这个检索步骤的用途
+          keywords: ["关键词1", "关键词2"]
+          event_types: ["speak", "request_anyone"]
+          scope: public | group:<id>
+          after_event_id: 可选，限定时间窗口
+          thread_depth: 0  # 沿引用链向上追溯几层
+          limit: 5
+    guardrails:
+      - 禁止直接生成 references
+      - retrieval_plan 为空时，需要解释为什么不查旧账
+
+  finalize:
+    description: >-
+      FinalIntention 必须基于 resolver 给出的候选事件，补全 references，
+      并产出最终 payload（speak 文本、submit 结果等）。
+    fields:
+      kind: 与 draft 对齐
+      payload: {text|result|score|...}
+      references:
+        - event_id: <required>
+          weight:
+            stance: -1.0..1.0
+            inspiration: 0.0..1.0
+            dependency: 0.0..1.0
+      candidate_references: optional，保留 resolver 返回的候选
+      completed: true|false
+    guardrails:
+      - references 不能为空，且必须来自 resolver 返回的 event_id
+      - 禁止编造不存在的 event_id
+      - payload 需与 kind 匹配，不得留空
+
+notes:
+  - 该文件仅描述意向生成流程，事件类型/字段要求仍由 intent_proposal.yaml 定义。
+  - 规则/假数据模式也应遵守同样的形状，确保流程可落盘、可测试。

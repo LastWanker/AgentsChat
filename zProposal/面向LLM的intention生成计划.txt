@@ -42,13 +42,13 @@ completed（如果还需要）
 可选：candidate_references 留给 debug
 这一步做完，你的系统就有了“生产线的模具”。
 
-2) 做一个 ReferenceResolver（不靠 LLM 也能跑）
-两段式里最关键的一段不是 query 本身，而是resolver 把检索结果变成 references。
-Resolver 负责：
-按 retrieval_plan 调用 query 拿候选事件列表
-选择 topK（先简单：最近优先 + 类型匹配 + 关键词命中数）
-生成 references（默认三维权重怎么填：可以先全 0，再由 LLM 在 FinalIntention 阶段填；stance/inspiration 留给 LLM）
-注意：你说“reference 必须也只能是 query 之后才能形成”——我同意。那就让 resolver 成为强制门槛：FinalIntention 不经过 resolver 不准落库。
+    2) 做一个 ReferenceResolver（不靠 LLM 也能跑）
+    两段式里最关键的一段不是 query 本身，而是resolver 把检索结果变成 references。
+    Resolver 负责：
+    按 retrieval_plan 调用 query 拿候选事件列表
+    选择 topK（先简单：最近优先 + 类型匹配 + 关键词命中数）
+    生成 references（默认三维权重怎么填：可以先全 0，再由 LLM 在 FinalIntention 阶段填；stance/inspiration 留给 LLM）
+    注意：你说“reference 必须也只能是 query 之后才能形成”——我同意。那就让 resolver 成为强制门槛：FinalIntention 不经过 resolver 不准落库。
 
 3) Query 扩展到“够 resolver 用”的最低集合
 你现在 query 只会 last_n / get_by_id 的话，resolver 会很瘸。
