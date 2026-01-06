@@ -1,0 +1,49 @@
+下一步计划（现在该干什么）
+
+一个能直接推进代码结构的路线，按重要性排序：
+1) 把“两段式意向生成”落成明确的 Schema（先别管 LLM，先把形状钉死）
+你需要两个 schema（可以是 Python TypedDict / pydantic / json schema，随你习惯）：
+A. IntentionDraft（不含 references）
+kind: 你现有意向类型（speak/submit/…）
+target_scope / visibility（如果你要）
+message_plan: 一句话说明“我打算说什么/做什么”（不是最终自然语言）
+retrieval_plan: 列表，描述要查什么（关键词、事件类型过滤、时间窗、scope、需要 thread/引用链深度等）
+B. FinalIntention（含 references + 最终文本）
+kind
+content（最终 speak 文本 / submit payload）
+references: 你三维 weight 的标准结构（event_id + weight{stance/inspiration/dependency}）
+completed（如果还需要）
+可选：candidate_references 留给 debug
+这一步做完，你的系统就有了“生产线的模具”。
+
+2) 做一个 ReferenceResolver（不靠 LLM 也能跑）
+两段式里最关键的一段不是 query 本身，而是resolver 把检索结果变成 references。
+Resolver 负责：
+按 retrieval_plan 调用 query 拿候选事件列表
+选择 topK（先简单：最近优先 + 类型匹配 + 关键词命中数）
+生成 references（默认三维权重怎么填：可以先全 0，再由 LLM 在 FinalIntention 阶段填；stance/inspiration 留给 LLM）
+注意：你说“reference 必须也只能是 query 之后才能形成”——我同意。那就让 resolver 成为强制门槛：FinalIntention 不经过 resolver 不准落库。
+
+3) Query 扩展到“够 resolver 用”的最低集合
+你现在 query 只会 last_n / get_by_id 的话，resolver 会很瘸。
+最小可用集合我建议三招（先朴素字符串 contains 就行）：
+recent(scope, n)
+search(scope, keywords, limit, event_types=None, after_id=None/after_time=None)
+thread_up(event_id, depth)（沿 references 往上追溯，拿上下文链）
+你别急着做向量库、embedding，那是后话。先用笨办法把链路跑通，再替换检索策略。
+
+4) 写“给 LLM 的 DraftPolicy”文件（拆开的那个）
+文件名我建议直白点，比如：
+policies/intent_production.yaml（或 intent_generation.yaml）
+内容包含两块：
+Draft 阶段的输出规范：要求给出 retrieval_plan，禁止直接写 references
+Finalize 阶段的输出规范：必须基于 resolver 返回的候选事件（event_id 列表+片段）来选引用并填三维 weight；禁止编造不存在的 event_id
+这份文件的角色是：提示词规约 + 自检清单，不是系统硬约束。硬约束应该在 interpreter/resolver 里。
+
+5) 把 intent_proposal.yaml 保持“法典化”
+intent_proposal.yaml 就继续只管：
+有哪些 event_type / action
+每个 action 需要的字段
+references 是否允许、允许多少条
+weight 的取值范围（即便你暂时不严格执行，也应该写在“法典”里当未来约束）
+一句话：它定义世界的语法，不定义写作方法。

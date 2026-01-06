@@ -87,6 +87,9 @@ class EventStore:
     def get(self, event_id: str) -> Optional[Event]:
         meta = self._index.get(event_id)
         if not meta:
+            print(
+                f"[events/store.py] ⚠️ 未在索引中找到事件 {event_id}，返回 None。"
+            )
             return None
 
         return self._read_event(meta["offset"], meta["len"])
@@ -135,6 +138,7 @@ class EventStore:
 
     def _read_event(self, offset: int, length: int) -> Optional[Event]:
         if not self.events_path.exists():
+            print("[events/store.py] ⚠️ events.jsonl 不存在，无法读取事件。")
             return None
 
         with self.events_path.open("rb") as f:
@@ -143,6 +147,9 @@ class EventStore:
             if not raw:
                 raw = f.readline()
         if not raw:
+            print(
+                f"[events/store.py] ⚠️ 在 offset={offset} length={length} 未读取到事件数据，返回 None。"
+            )
             return None
         data = json.loads(raw.decode("utf-8"))
         return Event(**data)
@@ -150,6 +157,7 @@ class EventStore:
     def _load_all_events(self) -> List[Event]:
         events: List[Event] = []
         if not self.events_path.exists():
+            print("[events/store.py] ⚠️ events.jsonl 不存在，返回空的事件列表。")
             return events
 
         with self.events_path.open("rb") as f:
@@ -160,7 +168,10 @@ class EventStore:
                     break
                 try:
                     event = Event(**json.loads(line.decode("utf-8")))
-                except Exception:
+                except Exception as exc:
+                    print(
+                        f"[events/store.py] ⚠️ 无法解析 offset={offset} 的事件：{type(exc).__name__}:{exc}，已跳过。"
+                    )
                     continue
                 self._index[event.event_id] = self._index_entry(event, offset, len(line))
                 events.append(event)
@@ -183,6 +194,7 @@ class EventStore:
     def _rebuild_index(self) -> None:
         self._index = {}
         if not self.events_path.exists():
+            print("[events/store.py] ⚠️ 无法重建索引：events.jsonl 不存在。")
             return
 
         with self.events_path.open("rb") as f:
@@ -195,9 +207,15 @@ class EventStore:
                     event = json.loads(line.decode("utf-8"))
                     eid = event.get("event_id")
                     if not eid:
+                        print(
+                            f"[events/store.py] ⚠️ offset={offset} 的事件缺少 event_id，无法索引，已忽略。"
+                        )
                         continue
                     self._index[eid] = self._index_entry(event, offset, len(line))
-                except Exception:
+                except Exception as exc:
+                    print(
+                        f"[events/store.py] ⚠️ 解析 offset={offset} 时出错：{type(exc).__name__}:{exc}，跳过该行。"
+                    )
                     continue
         self._persist_index()
 

@@ -47,14 +47,24 @@ class AgentController:
         """
         etype = event.get("type")
         if not etype:
+            print(
+                "[agents/controller.py] ⚠️ 收到缺少 type 的事件，无法分派，已忽略：",
+                event,
+            )
             return
 
         # 只对未 completed 的 request 做响应（沿用 legacy 语义）
         if etype in ("request_anyone", "request_specific") and event.get("completed", True):
+            print(
+                f"[agents/controller.py] ⚠️ 事件 {event.get('event_id', '<no-id>')} 已完成，跳过响应。"
+            )
             return
 
         candidates = self._select_agents_for_event(event)
         if not candidates:
+            print(
+                f"[agents/controller.py] ⚠️ 事件 {event.get('event_id', '<no-id>')} 没有合适的 Agent 响应，暂不处理。"
+            )
             return
 
         for agent in candidates:
@@ -115,7 +125,10 @@ class AgentController:
         if self.query is not None:
             try:
                 recent = [e.__dict__ if hasattr(e, "__dict__") else dict(e) for e in self.query.last_n(20)]
-            except Exception:
+            except Exception as exc:
+                print(
+                    f"[agents/controller.py] ⚠️ 获取最近事件失败，将使用空列表：{type(exc).__name__}:{exc}"
+                )
                 recent = []
 
         if self.store is not None:
@@ -125,7 +138,10 @@ class AgentController:
                     ev = self.store.get(ref_event_id(r))
                     if ev:
                         referenced.append(ev.__dict__ if hasattr(ev, "__dict__") else dict(ev))
-            except Exception:
+            except Exception as exc:
+                print(
+                    f"[agents/controller.py] ⚠️ 读取引用事件失败，将忽略引用：{type(exc).__name__}:{exc}"
+                )
                 referenced = []
 
         return ProposerContext(
