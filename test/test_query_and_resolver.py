@@ -125,4 +125,4 @@ def test_reference_resolver_builds_candidates(tmp_path):
 
     references = resolver.resolve(draft)
 
-    assert {ref["event_id"] for ref in references} == {"e1", "e2"}
+    assert {ref["event_id"] for ref in references} == {"e1", "e2", "e4"}

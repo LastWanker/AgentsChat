@@ -35,8 +35,16 @@ class ReferenceResolver:
     def _execute_instruction(
         self, instruction: RetrievalInstruction, scope: Optional[str]
     ) -> List[Event]:
-        if instruction.thread_depth > 0 and instruction.after_event_id:
-            return self.query.thread_up(instruction.after_event_id, instruction.thread_depth)
+        if instruction.after_event_id:
+            base_event = self.query.by_id(instruction.after_event_id)
+            chain: List[Event] = []
+            if base_event and (scope is None or base_event.scope == scope):
+                chain.append(base_event)
+
+            if instruction.thread_depth > 0:
+                chain.extend(self.query.thread_up(instruction.after_event_id, instruction.thread_depth))
+
+            return chain
 
         if instruction.keywords:
             if not scope:
