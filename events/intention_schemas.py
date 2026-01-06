@@ -58,6 +58,14 @@ class IntentionDraft:
     target_scope: Optional[str] = None
     visibility: Optional[str] = None
 
+    # runtime fields (kept lightweight to allow queueing without Intention)
+    intention_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    status: str = "pending"
+    deferred_until_tick: Optional[int] = None
+    deferred_until_time: Optional[float] = None
+    urgency: float = 0.0
+
     def __post_init__(self) -> None:
         self.retrieval_plan = [self._ensure_instruction(p) for p in self.retrieval_plan]
 
@@ -131,11 +139,11 @@ class FinalIntention:
         }
 
     def to_intention(
-        self,
-        *,
-        agent_id: str,
-        intention_id: str,
-        scope: Optional[str] = None,
+            self,
+            *,
+            agent_id: str,
+            intention_id: str,
+            scope: Optional[str] = None,
     ) -> Intention:
         return Intention(
             intention_id=intention_id,

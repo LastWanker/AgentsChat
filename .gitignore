@@ -186,3 +186,7 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 /data
+/test/data
+/test/data
+/test/data/sessions
+/test/data

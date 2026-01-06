@@ -1,10 +1,22 @@
+from events.intention_finalizer import IntentionFinalizer
+from events.intention_schemas import IntentionDraft
+
+
 class RuntimeLoop:
-    def __init__(self, controller, scheduler, router, *, max_ticks: int = 50):
+    def __init__(
+        self,
+        controller,
+        scheduler,
+        router,
+        max_ticks: int = 50,
+        finalizer: IntentionFinalizer | None = None,
+    ):
         self.controller = controller
         self.scheduler = scheduler
         self.router = router
         self.max_ticks = max_ticks
         self._tick_index = 0
+        self.finalizer = finalizer
 
     def tick(self):
         it, wait_sec = self.scheduler.choose(self.controller, loop_tick=self._tick_index)
@@ -22,17 +34,26 @@ class RuntimeLoop:
             return False
 
         # 找到对应 agent
-        agent = next(a for a in self.controller.agents if a.id == it.agent_id)
+        agent = next(a for a in self.controller.agents if a.id == getattr(it, "agent_id", None))
         print(
             f"[runtime/loop.py] 🎯 抽中了 {agent.name} 的意向 {it.intention_id}，类型是 {it.kind}。"
         )
-        self.router.handle_intention(it, agent, tick_index=self._tick_index)
 
-        if it.status == "pending":
+        intention_for_router = it
+        if isinstance(it, IntentionDraft):
+            if self.finalizer is None:
+                raise RuntimeError("RuntimeLoop 缺少 finalizer，无法处理 IntentionDraft。")
+            intention_for_router = self.finalizer.finalize(
+                it, agent_id=agent.id, intention_id=it.intention_id
+            )
+
+        self.router.handle_intention(intention_for_router, agent, tick_index=self._tick_index)
+
+        if intention_for_router.status == "pending":
             # 被冷却/延期，重新排回队尾等待下次调度
-            self.controller._queue.append(it)
+            self.controller._queue.append(intention_for_router)
             print(
-                f"[runtime/loop.py] 🔁 意向 {it.intention_id} 因冷却被暂缓，已重新入队等待下一轮。"
+                f"[runtime/loop.py] 🔁 意向 {intention_for_router.intention_id} 因冷却被暂缓，已重新入队等待下一轮。"
             )
         self._tick_index += 1
         return True

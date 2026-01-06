@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 from uuid import uuid4
 
 from events.references import ref_event_id
+from events.intention_schemas import IntentionDraft
 from events.types import Intention
 from agents.proposer import IntentionProposer, ProposerContext, ProposerConfig
 
@@ -24,7 +25,7 @@ class AgentController:
     ):
         self.agents = agents
         self._by_id = {a.id: a for a in agents}
-        self._queue: List[Intention] = []
+        self._queue: List[Intention | IntentionDraft] = []
 
         self.store = store
         self.query = query
@@ -70,11 +71,14 @@ class AgentController:
 
         for agent in candidates:
             ctx = self._build_context(agent, event)
-            intentions, _hints = self.proposer.propose(ctx)
-            for it in intentions:
-                self._queue.append(it)
+            drafts, _hints = self.proposer.propose(ctx)
+            for draft in drafts:
+                # 运行时标记 id/agent，方便后续追踪
+                draft.intention_id = draft.intention_id or str(uuid4())
+                draft.agent_id = agent.id
+                self._queue.append(draft)
                 print(
-                    f"[agents/controller.py] 🧩 收到事件 {event.get('event_id')}，为 {agent.name} 入队意向 {it.intention_id} ({it.kind})"
+                    f"[agents/controller.py] 🧩 收到事件 {event.get('event_id')}，为 {agent.name} 入队草稿 {draft.intention_id} ({draft.kind})"
                 )
 
     # ===== 选人逻辑（从 legacy 迁移并扩展）=====
@@ -151,14 +155,14 @@ class AgentController:
         )
 
     # ===== 队列接口 =====
-    def pending(self) -> List[Intention]:
-        return [x for x in self._queue if x.status == "pending"]
+    def pending(self) -> List[Intention | IntentionDraft]:
+        return [x for x in self._queue if getattr(x, "status", None) == "pending"]
 
     def prune_done(self) -> None:
         """把已执行/被压制的意向移出队列，避免影响队列状态判断。"""
 
         before = len(self._queue)
-        self._queue = [x for x in self._queue if x.status == "pending"]
+        self._queue = [x for x in self._queue if getattr(x, "status", None) == "pending"]
         if len(self._queue) != before:
             print(
                 f"[agents/controller.py] 🧹 清理了 {before - len(self._queue)} 条已完成/被压制的意向，剩余 {len(self._queue)} 条待处理。"

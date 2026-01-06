@@ -17,8 +17,10 @@ from agents.agent import Agent
 from events.store import EventStore
 from events.types import Event
 from events.references import normalize_references
+from events.intention_finalizer import IntentionFinalizer
 from events.query import EventQuery
-from agents.proposer import IntentionProposer, ProposerConfig  # 你现在的 proposer
+from events.reference_resolver import ReferenceResolver
+from agents.proposer import IntentionProposer, ProposerConfig
 
 
 @dataclass
@@ -165,11 +167,14 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         store=store,
         query=query,
     )
+    resolver = ReferenceResolver(query)
+    finalizer = IntentionFinalizer(resolver)
     loop = RuntimeLoop(
         controller=controller,
         scheduler=scheduler,
         router=router,
         max_ticks=cfg.max_ticks,
+        finalizer=finalizer,
     )
     print("[runtime/bootstrap.py] 🔌 Scheduler/Router/Controller/Loop 全部完成装配。")
 

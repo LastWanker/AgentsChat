@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from events.types import Intention
+from events.intention_schemas import IntentionDraft, RetrievalInstruction
 from uuid import uuid4
 
 
@@ -67,7 +67,7 @@ class IntentionProposer:
     def propose(
         self,
         context: ProposerContext,
-    ) -> Tuple[List[Intention], ProposerHints]:
+    ) -> Tuple[List[IntentionDraft], ProposerHints]:
 
         if self._use_llm():
             intentions, hints = self._propose_with_llm(context)
@@ -87,7 +87,7 @@ class IntentionProposer:
     def _propose_with_rules(
         self,
         context: ProposerContext,
-    ) -> Tuple[List[Intention], ProposerHints]:
+    ) -> Tuple[List[IntentionDraft], ProposerHints]:
 
         event = context.trigger_event
         etype = event.get("type")
@@ -98,38 +98,43 @@ class IntentionProposer:
 
         refs = [event_id] if event_id else []
 
-        intentions: List[Intention] = []
+        intentions: List[IntentionDraft] = []
         hints = ProposerHints()
 
         if etype in ("request_anyone", "request_specific", "request_all"):
             if self._should_submit_for_request(event_scope, etype, context):
                 intentions.append(
-                    Intention(
+                    IntentionDraft(
                         intention_id=str(uuid4()),
-                        agent_id=context.agent_id,  # 这里要从 Controller 传进来
+                        agent_id=context.agent_id,
                         kind="submit",
-                        payload={},
-                        scope=event_scope,
-                        candidate_references=refs,
-                        references=refs,
-                        completed=True,
+                        message_plan="提交对请求的响应并引用请求链路",
+                        retrieval_plan=[
+                            RetrievalInstruction(
+                                name="follow-request-thread",
+                                after_event_id=event_id,
+                                thread_depth=1,
+                                scope=event_scope,
+                            )
+                        ],
+                        target_scope=event_scope,
                     )
                 )
 
         elif etype in ("speak", "speak_public"):
             if self.config.allow_speak_replies:
                 intentions.append(
-                    Intention(
+                    IntentionDraft(
                         intention_id=str(uuid4()),
                         agent_id=context.agent_id,
                         kind="speak",
-                        payload={
-                            "text": self._simple_discussion_reply(payload.get("text"))
-                        },
-                        scope=context.scope or event_scope,
-                        candidate_references=refs,
-                        references=refs,
-                        completed=True,
+                        message_plan=self._simple_discussion_reply(payload.get("text")),
+                        retrieval_plan=[
+                            RetrievalInstruction(
+                                name="thread", after_event_id=event_id, thread_depth=1, scope=event_scope
+                            )
+                        ],
+                        target_scope=context.scope or event_scope,
                     )
                 )
 
@@ -140,7 +145,7 @@ class IntentionProposer:
     def _propose_with_llm(
         self,
         context: ProposerContext,
-    ) -> Tuple[List[Intention], ProposerHints]:
+    ) -> Tuple[List[IntentionDraft], ProposerHints]:
         """
         未来：
         - 构造 prompt（只用 context）
@@ -153,8 +158,8 @@ class IntentionProposer:
 
     def _validate_and_trim(
         self,
-        intentions: List[Intention],
-    ) -> List[Intention]:
+            intentions: List[IntentionDraft],
+    ) -> List[IntentionDraft]:
 
         # v0.3：只做最保守的裁剪
         if len(intentions) > self.config.max_intentions_per_event:

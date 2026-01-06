@@ -4,10 +4,13 @@ from pathlib import Path
 from agents.agent import Agent
 from agents.controller import AgentController
 from agents.interpreter import IntentInterpreter
+from events.intention_finalizer import IntentionFinalizer
+from events.reference_resolver import ReferenceResolver
 from platform.observers import AgentObserver, ConsoleObserver
 from platform.router import Router
 from platform.world import World
 from events.store import EventStore
+from events.query import EventQuery
 from runtime.loop import RuntimeLoop
 from runtime.scheduler import Scheduler
 
@@ -25,9 +28,10 @@ def build_demo():
     print("[main.py] 🌍 世界 World 已经出生，准备接收各种事件。")
 
     store = EventStore()
+    query = EventQuery(store)
     print("[main.py] 📚 事件仓库开门营业，所有动静都会记下来。")
 
-    interpreter = IntentInterpreter(constraint_path=POLICY_PATH)
+    interpreter = IntentInterpreter(constraint_path=POLICY_PATH, allow_empty_policy=True)
     print(f"[main.py] 📜 解释器装载策略：{POLICY_PATH}，等着翻译意向。")
 
     agents = [
@@ -36,7 +40,7 @@ def build_demo():
     ]
     print(f"[main.py] 🤖 造好两个小伙伴：{[a.name for a in agents]}，他们各司其职。")
 
-    controller = AgentController(agents, store=store)
+    controller = AgentController(agents, store=store, query=query)
     controller.seed_demo_intentions()
     print("[main.py] 📨 控制器已塞入第一批意向，感觉有人要开口说话了。")
 
@@ -51,7 +55,9 @@ def build_demo():
         world.add_observer(AgentObserver(ag))
     print("[main.py] 👀 观察者全体上线，所有风吹草动都会被看到。")
 
-    loop = RuntimeLoop(controller, scheduler, router)
+    resolver = ReferenceResolver(query)
+    finalizer = IntentionFinalizer(resolver)
+    loop = RuntimeLoop(controller, scheduler, router, finalizer=finalizer)
     print("[main.py] 🔄 循环引擎启动完毕，随时可以开跑。\n")
     return loop, world, store, agents
 
