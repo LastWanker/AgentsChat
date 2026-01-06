@@ -84,6 +84,31 @@ class EventStore:
             f"[events/store.py] 🗃️ 收纳事件 {event.event_id}，类型 {event.type}。",
         )
 
+    def mark_completed(self, event_id: str) -> bool:
+        """Mark an existing event as completed and persist the change.
+
+        Returns True if the flag was updated, False otherwise.
+        """
+        ev = self.get(event_id)
+        if ev is None:
+            print(
+                f"[events/store.py] ⚠️ 无法标记完成：事件 {event_id} 不存在。"
+            )
+            return False
+        if getattr(ev, "completed", False):
+            print(
+                f"[events/store.py] ℹ️ 事件 {event_id} 已是 completed，无需更新。"
+            )
+            return False
+
+        ev.completed = True
+        self._upsert_event(ev)
+        print(
+            f"[events/store.py] ✅ 已将事件 {event_id} 标记为 completed，索引与文件已更新。"
+        )
+        return True
+
+
     def get(self, event_id: str) -> Optional[Event]:
         meta = self._index.get(event_id)
         if not meta:
@@ -224,6 +249,35 @@ class EventStore:
         self.index_path.write_text(
             json.dumps(self._index, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+    # ---------- update helpers ----------
+    def _upsert_event(self, event: Event) -> None:
+        events = self.all()
+        replaced = False
+        for idx, ev in enumerate(events):
+            if ev.event_id == event.event_id:
+                events[idx] = event
+                replaced = True
+                break
+        if not replaced:
+            events.append(event)
+
+        self._rewrite_events(events)
+
+    def _rewrite_events(self, events: List[Event]) -> None:
+        self.events_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.events_path.open("wb") as f:
+            offset = 0
+            self._index = {}
+            for ev in events:
+                payload = json.dumps(asdict(ev), ensure_ascii=False) + "\n"
+                data = payload.encode("utf-8")
+                f.write(data)
+                self._index[ev.event_id] = self._index_entry(ev, offset, len(data))
+                offset += len(data)
+
+        self._persist_index()
+        self._events_cache = list(events)
 
     @staticmethod
     def _index_entry(event: Dict | Event, offset: int, length: int) -> Dict:

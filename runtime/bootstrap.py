@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Optional, Dict, List, Any
 from uuid import uuid4
 
-# 下面这些 import 按你的实际路径调整
 from platform.world import World
 from platform.observers import AgentObserver
 from agents.controller import AgentController
@@ -13,6 +12,7 @@ from runtime.loop import RuntimeLoop
 from runtime.scheduler import Scheduler
 from platform.router import Router
 from agents.interpreter import IntentInterpreter
+from platform.request_tracker import RequestCompletionObserver
 from agents.agent import Agent
 from events.store import EventStore
 from events.types import Event
@@ -166,6 +166,11 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     # === 插线：Controller 观察世界（产出意向入队） ===
     world.add_observer(controller)
     print("[runtime/bootstrap.py] 🛰️ AgentController 也开始观察世界事件。")
+    # === 插线：Request 完成监控（生成闭环声明） ===
+    world.add_observer(
+        RequestCompletionObserver(store=store, world=world, agents=cfg.agents)
+    )
+    print("[runtime/bootstrap.py] ✅ RequestCompletionObserver 启用，负责宣告请求完成。")
 
     # === 注入 seed events（Boss 或测试用）===
     if cfg.seed_events:
