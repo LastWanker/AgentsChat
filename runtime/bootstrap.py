@@ -28,6 +28,7 @@ class RuntimeConfig:
 
     enable_llm: bool = False
     llm_client: Optional[object] = None  # 先占位
+    allow_empty_policy: bool = False
 
     # Store/session
     data_dir: str = "data/sessions"
@@ -129,7 +130,10 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         config=ProposerConfig(enable_llm=cfg.enable_llm),
         llm_client=cfg.llm_client,
     )
-    interpreter = IntentInterpreter(constraint_path=cfg.policy_path)  # 现在 Interpreter 读 yaml
+    interpreter = IntentInterpreter(
+        constraint_path=cfg.policy_path,
+        allow_empty_policy=cfg.allow_empty_policy,
+    )  # 现在 Interpreter 读 yaml
     print("[runtime/bootstrap.py] 🧠 IntentionProposer 与 IntentInterpreter 已就绪。")
 
     # === Scheduler/Router/Controller/Loop ===
