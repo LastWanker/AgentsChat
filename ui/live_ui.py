@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
+import webbrowser
 from collections import deque
 from functools import partial
 from http import HTTPStatus
@@ -87,7 +89,9 @@ def main():
     parser = argparse.ArgumentParser(description="AgentsChat live UI server")
     parser.add_argument("--data-dir", default="data/sessions", help="events data dir")
     parser.add_argument("--session-id", default=None, help="session id to load")
+    parser.add_argument("--host", default="0.0.0.0", help="host to bind")
     parser.add_argument("--port", type=int, default=8000, help="port to serve")
+    parser.add_argument("--auto-open", action="store_true", help="auto open UI in browser")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
@@ -102,17 +106,51 @@ def main():
         default_session=default_session,
     )
 
-    server = ThreadingHTTPServer(("0.0.0.0", args.port), handler)
+    server = ThreadingHTTPServer((args.host, args.port), handler)
     print(
-        "[ui/live_ui.py] Serving live UI at http://0.0.0.0:%d (session=%s)"
-        % (args.port, default_session or "none")
+        "[ui/live_ui.py] Serving live UI at http://%s:%d (session=%s)"
+        % (args.host, args.port, default_session or "none")
     )
+    if args.auto_open:
+        open_host = args.host if args.host != "0.0.0.0" else "127.0.0.1"
+        webbrowser.open(f"http://{open_host}:{args.port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n[ui/live_ui.py] Stopped.")
     finally:
         server.server_close()
+
+def start_live_ui_server(
+    *,
+    data_dir: Path,
+    session_id: str | None,
+    host: str,
+    port: int,
+    auto_open: bool,
+) -> ThreadingHTTPServer | None:
+    directory = Path(__file__).resolve().parent
+    handler = partial(
+        LiveUIHandler,
+        directory=str(directory),
+        data_dir=data_dir,
+        default_session=session_id,
+    )
+    try:
+        server = ThreadingHTTPServer((host, port), handler)
+    except OSError as exc:
+        print(f"[ui/live_ui.py] ⚠️ 无法启动 UI server: {exc}")
+        return None
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(
+        "[ui/live_ui.py] 🖥️ Live UI 已后台启动: http://%s:%d (session=%s)"
+        % (host, port, session_id or "none")
+    )
+    if auto_open:
+        open_host = host if host != "0.0.0.0" else "127.0.0.1"
+        webbrowser.open(f"http://{open_host}:{port}")
+    return server
 
 
 if __name__ == "__main__":

@@ -56,6 +56,13 @@ def _get_env_int(key: str, default: int) -> int:
         return default
 
 
+def _get_env_str(key: str, default: str) -> str:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    return raw
+
+
 @dataclass(frozen=True)
 class AppSettings:
     llm_enabled: bool = False
@@ -75,6 +82,11 @@ class AppSettings:
     llm_temperature: float = 0.7
     llm_max_tokens: int = 512
 
+    ui_enabled: bool = False
+    ui_auto_open: bool = False
+    ui_host: str = "127.0.0.1"
+    ui_port: int = 8000
+
 
 def load_settings() -> AppSettings:
     _load_env_file(_ENV_FILE)
@@ -92,4 +104,8 @@ def load_settings() -> AppSettings:
         llm_retry_backoff_base=_get_env_float("LLM_RETRY_BACKOFF_BASE", 0.5),
         llm_temperature=_get_env_float("LLM_TEMPERATURE", 0.7),
         llm_max_tokens=_get_env_int("LLM_MAX_TOKENS", 512),
+        ui_enabled=_get_env_bool("UI_ENABLED", False),
+        ui_auto_open=_get_env_bool("UI_AUTO_OPEN", False),
+        ui_host=_get_env_str("UI_HOST", "127.0.0.1"),
+        ui_port=_get_env_int("UI_PORT", 8000),
     )

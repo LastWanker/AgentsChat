@@ -13,6 +13,11 @@ def parse_args(argv=None):
     p.add_argument("--max-ticks", type=int, default=50)
     p.add_argument("--enable-llm", action="store_true", default=None)
     p.add_argument("--disable-llm", action="store_false", dest="enable_llm")
+    p.add_argument("--enable-ui", action="store_true", default=None)
+    p.add_argument("--disable-ui", action="store_false", dest="enable_ui")
+    p.add_argument("--ui-auto-open", action="store_true", default=None)
+    p.add_argument("--ui-host", default=None)
+    p.add_argument("--ui-port", type=int, default=None)
     p.add_argument("--data-dir", default="data/sessions", help="session 落盘目录")
     p.add_argument(
         "--allow-empty-policy",
@@ -33,6 +38,10 @@ def parse_args(argv=None):
             "session_id": args.session_id,
             "resume": args.resume,
             "allow_empty_policy": args.allow_empty_policy,
+            "enable_ui": args.enable_ui,
+            "ui_auto_open": args.ui_auto_open,
+            "ui_host": args.ui_host,
+            "ui_port": args.ui_port,
         },
     )
     return args
@@ -62,6 +71,18 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     enable_llm = settings.llm_enabled if args.enable_llm is None else args.enable_llm
     llm_client = build_openai_client_from_settings(settings) if enable_llm else None
 
+    enable_ui_arg = getattr(args, "enable_ui", None)
+    ui_auto_open_arg = getattr(args, "ui_auto_open", None)
+    ui_host_arg = getattr(args, "ui_host", None)
+    ui_port_arg = getattr(args, "ui_port", None)
+
+    enable_ui = settings.ui_enabled if enable_ui_arg is None else enable_ui_arg
+    ui_auto_open = (
+        settings.ui_auto_open if ui_auto_open_arg is None else ui_auto_open_arg
+    )
+    ui_host = settings.ui_host if ui_host_arg is None else ui_host_arg
+    ui_port = settings.ui_port if ui_port_arg is None else ui_port_arg
+
     cfg = RuntimeConfig(
         agents=[boss, alice, bob],
         policy_path=args.policy,
@@ -73,6 +94,10 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         data_dir=args.data_dir,
         session_id=args.session_id,
         resume_session_id=args.resume,
+        ui_enabled=enable_ui,
+        ui_auto_open=ui_auto_open,
+        ui_host=ui_host,
+        ui_port=ui_port,
         agent_cooldowns_sec={
             "Alice": 1.5,
             "Bob": 1.5,

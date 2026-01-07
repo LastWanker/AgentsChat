@@ -39,6 +39,12 @@ class RuntimeConfig:
     resume_session_id: Optional[str] = None  # 恢复已有 session
     session_metadata: Optional[Dict[str, Any]] = None
 
+    # UI
+    ui_enabled: bool = False
+    ui_auto_open: bool = False
+    ui_host: str = "127.0.0.1"
+    ui_port: int = 8000
+
     # Router 纪律
     agent_cooldowns_sec: Optional[Dict[str, float]] = None
     inter_event_gap_sec: float = 0.0
@@ -136,6 +142,16 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     print(
         f"[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery，session={store.session_id}。"
     )
+    if cfg.ui_enabled:
+        from ui.live_ui import start_live_ui_server
+
+        start_live_ui_server(
+            data_dir=store.base_dir,
+            session_id=store.session_id,
+            host=cfg.ui_host,
+            port=cfg.ui_port,
+            auto_open=cfg.ui_auto_open,
+        )
     world = World(store=store) if "store" in World.__init__.__code__.co_varnames else World()
     print("[runtime/bootstrap.py] 🌍 World 构建完成，准备接线各路组件。")
 
