@@ -101,10 +101,9 @@ class IntentionProposer:
         payload = event.get("payload") or event.get("content") or {}
         event_scope = event.get("scope") or context.scope or "public"
 
-        refs = [event_id] if event_id else []
-
         intentions: List[IntentionDraft] = []
         hints = ProposerHints()
+        confidence, motivation, urgency = self._default_intent_scores(etype)
 
         if etype in ("request_anyone", "request_specific", "request_all"):
             if self._should_submit_for_request(event_scope, etype, context):
@@ -123,6 +122,9 @@ class IntentionProposer:
                             )
                         ],
                         target_scope=event_scope,
+                        confidence=confidence,
+                        motivation=motivation,
+                        urgency=urgency,
                     )
                 )
 
@@ -140,8 +142,33 @@ class IntentionProposer:
                             )
                         ],
                         target_scope=context.scope or event_scope,
+                        confidence=confidence,
+                        motivation=motivation,
+                        urgency=urgency,
                     )
                 )
+
+        if not intentions:
+            intentions.append(
+                IntentionDraft(
+                    intention_id=str(uuid4()),
+                    agent_id=context.agent_id,
+                    kind="speak",
+                    message_plan="收到事件，暂时没有补充。",
+                    retrieval_plan=[
+                        RetrievalInstruction(
+                            name="fallback-thread",
+                            after_event_id=event_id,
+                            thread_depth=1,
+                            scope=event_scope,
+                        )
+                    ],
+                    target_scope=context.scope or event_scope,
+                    confidence=confidence,
+                    motivation=motivation,
+                    urgency=urgency,
+                )
+            )
 
         return intentions, hints
 
@@ -214,6 +241,13 @@ class IntentionProposer:
         if text:
             return f"收到发言，基于实时时间冷却后给出讨论：{text}"
         return "收到发言，基于实时时间冷却后给出讨论意见。"
+
+    def _default_intent_scores(self, etype: Optional[str]) -> Tuple[float, float, float]:
+        if etype in ("request_anyone", "request_specific", "request_all"):
+            return 0.5, 0.8, 0.8
+        if etype in ("speak", "speak_public"):
+            return 0.6, 0.4, 0.3
+        return 0.4, 0.4, 0.2
 
     def _should_submit_for_request(
             self, event_scope: str, etype: str, context: ProposerContext

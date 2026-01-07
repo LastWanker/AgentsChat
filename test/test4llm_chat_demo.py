@@ -37,7 +37,7 @@ def main():
         enable_llm=True,
         llm_client=llm_client,
         llm_mode=settings.llm_mode,
-        max_ticks=20,
+        max_ticks=6,
         seed_events=[seed],
         allow_empty_policy=True,
     )

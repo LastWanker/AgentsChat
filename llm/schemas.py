@@ -9,11 +9,22 @@ from events.intention_schemas import IntentionDraft
 INTENTION_DRAFT_SCHEMA: Dict[str, Any] = {
     "title": "意向草稿",
     "type": "object",
-    "required": ["kind", "message_plan", "draft_text", "retrieval_plan"],
+    "required": [
+        "kind",
+        "message_plan",
+        "draft_text",
+        "retrieval_plan",
+        "confidence",
+        "motivation",
+        "urgency",
+    ],
     "properties": {
         "kind": {"type": "string", "description": "意向类型，如 speak/submit"},
         "message_plan": {"type": "string", "description": "行动/回复计划"},
         "draft_text": {"type": "string", "description": "面向群内其他成员的草稿文本（我打算说/提交的内容）"},
+        "confidence": {"type": "number", "description": "对主题了解程度(0~1)"},
+        "motivation": {"type": "number", "description": "兴趣/回答意愿(0~1)"},
+        "urgency": {"type": "number", "description": "重要性/紧迫性(0~1)"},
         "retrieval_plan": {
             "type": "array",
             "items": {
@@ -46,7 +57,7 @@ INTENTION_FINAL_SCHEMA: Dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["event_id"],
+                "required": ["event_id", "weight"],
                 "properties": {
                     "event_id": {"type": "string"},
                         "weight": {
@@ -80,6 +91,12 @@ def parse_intention_draft(payload: str) -> IntentionDraft:
 
     data = _extract_json(payload)
     return IntentionDraft.from_dict(data)
+
+
+def parse_intention_final(payload: str) -> Dict[str, Any]:
+    """从 LLM 输出里解析 FinalIntention 字典。"""
+
+    return _extract_json(payload)
 
 
 def _extract_json(payload: str) -> Dict[str, Any]:

@@ -21,19 +21,18 @@ class RuntimeLoop:
         self.idle_wait_sec = idle_wait_sec
 
     def tick(self):
-        it, wait_sec = self.scheduler.choose(self.controller, loop_tick=self._tick_index)
-        if it is None:
-            if wait_sec is not None:
-                print(
-                    f"[runtime/loop.py] ⏸️ 队列里没人立即可用，但有人在冷却，等待 {wait_sec:.2f}s 再试。"
-                )
-                if wait_sec > 0:
-                    import time
+        agent, wait_sec = self.scheduler.choose_agent(self.controller.agents, loop_tick=self._tick_index)
+        if agent is None:
+            if wait_sec is not None and wait_sec > 0:
+                import time
 
-                    time.sleep(wait_sec)
+                print(
+                    f"[runtime/loop.py] ⏸️ 没有可调度 Agent，等待 {wait_sec:.2f}s。"
+                )
+                time.sleep(wait_sec)
                 return True
             print(
-                f"[runtime/loop.py] ⏳ 队列空了，等待 {self.idle_wait_sec:.2f}s 看看是否有新的意向。"
+                f"[runtime/loop.py] ⏳ 暂无 Agent 可调度，等待 {self.idle_wait_sec:.2f}s。"
             )
             if self.idle_wait_sec > 0:
                 import time
@@ -41,36 +40,65 @@ class RuntimeLoop:
                 time.sleep(self.idle_wait_sec)
             return True
 
-        # 找到对应 agent
-        agent = next(a for a in self.controller.agents if a.id == getattr(it, "agent_id", None))
+        draft = self.controller.propose_for_agent(agent)
+        if draft is None:
+            print(
+                f"[runtime/loop.py] 💤 {agent.name} 没有可用草稿，跳过本轮。"
+            )
+            self.scheduler.record_turn(agent.id, loop_tick=self._tick_index)
+            self._tick_index += 1
+            return True
+
         print(
-            f"[runtime/loop.py] 🎯 抽中了 {agent.name} 的意向 {it.intention_id}，类型是 {it.kind}。"
+            f"[runtime/loop.py] 🎯 轮到 {agent.name} 的草稿 {draft.intention_id}，类型是 {draft.kind}。"
         )
 
-        intention_for_router = it
-        if isinstance(it, IntentionDraft):
+        should_finalize = self._should_finalize(draft)
+        if not should_finalize:
+            print(
+                f"[runtime/loop.py] 💤 {agent.name} 意愿评分不足，发布“兴趣缺缺”声明。"
+            )
+            from events.types import Intention
+
+            intention_for_router = Intention(
+                intention_id=draft.intention_id,
+                agent_id=agent.id,
+                kind="speak",
+                payload={"text": f"{agent.name}对讨论兴趣缺缺，跳过了这次发言。"},
+                scope=draft.target_scope or agent.scope,
+                references=[],
+                completed=True,
+                confidence=draft.confidence,
+                motivation=draft.motivation,
+                urgency=draft.urgency,
+            )
+        else:
             if self.finalizer is None:
                 raise RuntimeError("RuntimeLoop 缺少 finalizer，无法处理 IntentionDraft。")
             print(
-                f"[runtime/loop.py] 🔍 发现草稿 {it.intention_id}，进入两段式流程：先交给 finalizer 解析引用再路由。"
+                f"[runtime/loop.py] 🔍 草稿 {draft.intention_id} 进入两段式流程：先交给 finalizer 解析引用再路由。"
             )
             intention_for_router = self.finalizer.finalize(
-                it, agent_id=agent.id, intention_id=it.intention_id
+                draft, agent_id=agent.id, intention_id=draft.intention_id
             )
             print(
-                f"[runtime/loop.py] ✅ 草稿 {it.intention_id} 完成 final 阶段，已转换成可路由的意向。"
+                f"[runtime/loop.py] ✅ 草稿 {draft.intention_id} 完成 final 阶段，已转换成可路由的意向。"
             )
 
-        self.router.handle_intention(intention_for_router, agent, tick_index=self._tick_index)
-
-        if intention_for_router.status == "pending":
-            # 被冷却/延期，重新排回队尾等待下次调度
-            self.controller._queue.append(intention_for_router)
+        decision = self.router.handle_intention(intention_for_router, agent, tick_index=self._tick_index)
+        if decision.status == "suppressed" and any(v.get("kind") == "cooldown" for v in decision.violations):
             print(
-                f"[runtime/loop.py] 🔁 意向 {intention_for_router.intention_id} 因冷却被暂缓，已重新入队等待下一轮。"
+                f"[runtime/loop.py] ⏳ {agent.name} 触发冷却，本轮不计入轮次。"
             )
+        else:
+            self.scheduler.record_turn(agent.id, loop_tick=self._tick_index)
         self._tick_index += 1
         return True
+
+    @staticmethod
+    def _should_finalize(draft: IntentionDraft) -> bool:
+        score = draft.confidence + draft.motivation + draft.urgency
+        return score > 1.0 or max(draft.confidence, draft.motivation, draft.urgency) > 0.5
 
     def run(self, max_ticks: int | None = None):
         total_ticks = max_ticks if max_ticks is not None else self.max_ticks

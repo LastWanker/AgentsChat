@@ -1,52 +1,25 @@
 class Scheduler:
     """
-    v0.1：先来先服务，但会跳过尚在冷却/延期中的意向。
+    v0.2：按 agent 最近未发言优先进行轮次调度。
     """
-    def choose(self, controller, *, loop_tick: int = 0):
-        import time
 
-        now = time.monotonic()
-        pending_found = False
-        min_wait: float | None = None
+    def __init__(self) -> None:
+        self._last_turn_tick: dict[str, int] = {}
 
-        pending_found = False
-        min_wait: float | None = None
+    def choose_agent(self, agents, *, loop_tick: int = 0):
+        if not agents:
+            print("[runtime/scheduler.py] 🙅‍♂️ 没有可调度的 Agent。")
+            return None, None
 
-        controller.prune_done()
+        def last_turn(agent_id: str) -> int:
+            return self._last_turn_tick.get(agent_id, -1)
 
-        for idx, it in enumerate(list(controller._queue)):
-            if it.status != "pending":
-                continue
+        ordered = sorted(agents, key=lambda ag: (last_turn(ag.id), ag.name))
+        picked = ordered[0]
+        print(
+            f"[runtime/scheduler.py] 🎲 轮到 {picked.name} 上麦（最近轮次={last_turn(picked.id)}）。"
+        )
+        return picked, 0.0
 
-            pending_found = True
-
-            if it.deferred_until_tick is not None and loop_tick < it.deferred_until_tick:
-                print(
-                    f"[runtime/scheduler.py] ⚠️ 意向 {it.intention_id} 需等待到 tick {it.deferred_until_tick}，本轮跳过。"
-                )
-                # tick 间隔暂定 0.0：由 loop 控制具体等待
-                min_wait = 0.0 if min_wait is None else min(min_wait, 0.0)
-                continue
-
-            if it.deferred_until_time is not None and now < it.deferred_until_time:
-                wait = max(it.deferred_until_time - now, 0.0)
-                print(
-                    f"[runtime/scheduler.py] ⚠️ 意向 {it.intention_id} 仍在冷却 {wait:.2f}s，本轮不调度。"
-                )
-                min_wait = wait if min_wait is None else min(min_wait, wait)
-                continue
-
-            controller._queue.pop(idx)
-            print(
-                f"[runtime/scheduler.py] 🎲 把 {it.intention_id} 排到前台，由 {it.agent_id} 先上麦。"
-            )
-            return it, 0.0
-
-        if pending_found:
-            print(
-                "[runtime/scheduler.py] ⏳ 队列里都是冷却/延期中的意向，等待下一次重试。"
-            )
-            return None, min_wait
-
-        print("[runtime/scheduler.py] 🙅‍♂️ 队列空空如也，没啥可调度的。")
-        return None, None
+    def record_turn(self, agent_id: str, *, loop_tick: int) -> None:
+        self._last_turn_tick[agent_id] = loop_tick

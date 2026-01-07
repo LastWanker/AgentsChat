@@ -58,6 +58,9 @@ class IntentionDraft:
     retrieval_plan: List[RetrievalInstruction] = field(default_factory=list)
     target_scope: Optional[str] = None
     visibility: Optional[str] = None
+    confidence: float = 0.0
+    motivation: float = 0.0
+    urgency: float = 0.0
 
     # runtime fields (kept lightweight to allow queueing without Intention)
     intention_id: Optional[str] = None
@@ -65,12 +68,14 @@ class IntentionDraft:
     status: str = "pending"
     deferred_until_tick: Optional[int] = None
     deferred_until_time: Optional[float] = None
-    urgency: float = 0.0
 
     def __post_init__(self) -> None:
         self.retrieval_plan = [self._ensure_instruction(p) for p in self.retrieval_plan]
         if not self.draft_text:
             self.draft_text = self.message_plan
+        self.confidence = self._clamp_unit(self.confidence)
+        self.motivation = self._clamp_unit(self.motivation)
+        self.urgency = self._clamp_unit(self.urgency)
 
     @staticmethod
     def _ensure_instruction(plan: RetrievalInstruction | Dict[str, Any]) -> RetrievalInstruction:
@@ -89,6 +94,9 @@ class IntentionDraft:
             retrieval_plan=raw.get("retrieval_plan", []),
             target_scope=raw.get("target_scope"),
             visibility=raw.get("visibility"),
+            confidence=float(raw.get("confidence", 0.0)),
+            motivation=float(raw.get("motivation", 0.0)),
+            urgency=float(raw.get("urgency", 0.0)),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -99,7 +107,18 @@ class IntentionDraft:
             "retrieval_plan": [p.to_dict() for p in self.retrieval_plan],
             "target_scope": self.target_scope,
             "visibility": self.visibility,
+            "confidence": self.confidence,
+            "motivation": self.motivation,
+            "urgency": self.urgency,
         }
+
+    @staticmethod
+    def _clamp_unit(value: float) -> float:
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(1.0, value))
 
 
 @dataclass
@@ -112,6 +131,9 @@ class FinalIntention:
     target_scope: Optional[str] = None
     candidate_references: List[Reference] = field(default_factory=list)
     completed: bool = True
+    confidence: float = 0.0
+    motivation: float = 0.0
+    urgency: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.references:
@@ -131,6 +153,9 @@ class FinalIntention:
             target_scope=raw.get("target_scope"),
             candidate_references=raw.get("candidate_references", []),
             completed=bool(raw.get("completed", True)),
+            confidence=float(raw.get("confidence", 0.0)),
+            motivation=float(raw.get("motivation", 0.0)),
+            urgency=float(raw.get("urgency", 0.0)),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -141,6 +166,9 @@ class FinalIntention:
             "target_scope": self.target_scope,
             "candidate_references": [dict(r) for r in self.candidate_references],
             "completed": self.completed,
+            "confidence": self.confidence,
+            "motivation": self.motivation,
+            "urgency": self.urgency,
         }
 
     def to_intention(
@@ -149,6 +177,9 @@ class FinalIntention:
             agent_id: str,
             intention_id: str,
             scope: Optional[str] = None,
+            confidence: float | None = None,
+            motivation: float | None = None,
+            urgency: float | None = None,
     ) -> Intention:
         return Intention(
             intention_id=intention_id,
@@ -159,4 +190,7 @@ class FinalIntention:
             candidate_references=self.candidate_references,
             references=self.references,
             completed=self.completed,
+            confidence=self.confidence if confidence is None else confidence,
+            motivation=self.motivation if motivation is None else motivation,
+            urgency=self.urgency if urgency is None else urgency,
         )

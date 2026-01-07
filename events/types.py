@@ -28,6 +28,8 @@ class Intention:
     candidate_references: List[Reference] = field(default_factory=list)
     references: List[Reference] = field(default_factory=list)
     completed: bool = True
+    confidence: float = 0.0
+    motivation: float = 0.0
     urgency: float = 0.0
     status: Literal["pending", "suppressed", "approved", "executed"] = "pending"
     deferred_until_tick: Optional[int] = None

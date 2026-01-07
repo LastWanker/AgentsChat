@@ -17,7 +17,7 @@ from agents.agent import Agent
 from events.store import EventStore
 from events.types import Event
 from events.references import normalize_references
-from events.intention_finalizer import IntentionFinalizer
+from events.intention_finalizer import IntentionFinalizer, FinalizerConfig
 from events.query import EventQuery
 from events.reference_resolver import ReferenceResolver
 from agents.proposer import IntentionProposer, ProposerConfig
@@ -169,7 +169,11 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         query=query,
     )
     resolver = ReferenceResolver(query)
-    finalizer = IntentionFinalizer(resolver)
+    finalizer = IntentionFinalizer(
+        resolver,
+        config=FinalizerConfig(enable_llm=cfg.enable_llm, llm_mode=cfg.llm_mode),
+        llm_client=cfg.llm_client,
+    )
     loop = RuntimeLoop(
         controller=controller,
         scheduler=scheduler,

@@ -6,7 +6,6 @@ from uuid import uuid4
 
 from events.references import ref_event_id
 from events.intention_schemas import IntentionDraft
-from events.types import Intention
 from agents.proposer import IntentionProposer, ProposerContext, ProposerConfig
 
 
@@ -25,7 +24,6 @@ class AgentController:
     ):
         self.agents = agents
         self._by_id = {a.id: a for a in agents}
-        self._queue: List[Intention | IntentionDraft] = []
 
         self.store = store
         self.query = query
@@ -33,6 +31,7 @@ class AgentController:
         self.proposer = proposer or IntentionProposer(
             config=ProposerConfig(enable_llm=False)
         )
+        self._latest_event: Optional[Dict[str, Any]] = None
 
         # 让 Controller 作为 observer 时具备“看见一切”的权限
         self.id = "agent_controller"
@@ -42,10 +41,7 @@ class AgentController:
     def on_event(self, event: Dict[str, Any]):
         """
         世界中发生新事件时，Controller 被动接收：
-        - 判断是否需要响应
-        - 选出合适的 agent（或多个）
-        - 为每个 agent 调 proposer 产出 intentions
-        - 入队
+        - 记录最近事件，供后续轮次提取意向草稿
         """
         etype = event.get("type")
         if not etype:
@@ -55,31 +51,23 @@ class AgentController:
             )
             return
 
-        # 只对未 completed 的 request 做响应（沿用 legacy 语义）
-        if etype in ("request_anyone", "request_specific") and event.get("completed", True):
-            print(
-                f"[agents/controller.py] ⚠️ 事件 {event.get('event_id', '<no-id>')} 已完成，跳过响应。"
-            )
-            return
+        self._latest_event = event
 
-        candidates = self._select_agents_for_event(event)
-        if not candidates:
-            print(
-                f"[agents/controller.py] ⚠️ 事件 {event.get('event_id', '<no-id>')} 没有合适的 Agent 响应，暂不处理。"
-            )
-            return
-
-        for agent in candidates:
-            ctx = self._build_context(agent, event)
-            drafts, _hints = self.proposer.propose(ctx)
-            for draft in drafts:
-                # 运行时标记 id/agent，方便后续追踪
-                draft.intention_id = draft.intention_id or str(uuid4())
-                draft.agent_id = agent.id
-                self._queue.append(draft)
-                print(
-                    f"[agents/controller.py] 🧩 收到事件 {event.get('event_id')}，为 {agent.name} 入队草稿 {draft.intention_id} ({draft.kind})"
-                )
+    def propose_for_agent(self, agent) -> Optional[IntentionDraft]:
+        trigger_event = self._latest_event or self._latest_store_event()
+        if not trigger_event:
+            return None
+        ctx = self._build_context(agent, trigger_event)
+        drafts, _hints = self.proposer.propose(ctx)
+        if not drafts:
+            return None
+        draft = drafts[0]
+        draft.intention_id = draft.intention_id or str(uuid4())
+        draft.agent_id = agent.id
+        print(
+            f"[agents/controller.py] 🧩 为 {agent.name} 生成草稿 {draft.intention_id} ({draft.kind})"
+        )
+        return draft
 
     # ===== 选人逻辑（从 legacy 迁移并扩展）=====
     def _select_agents_for_event(self, event: Dict[str, Any]) -> List:
@@ -162,45 +150,11 @@ class AgentController:
             referenced_events=referenced,
         )
 
-    # ===== 队列接口 =====
-    def pending(self) -> List[Intention | IntentionDraft]:
-        return [x for x in self._queue if getattr(x, "status", None) == "pending"]
-
-    def prune_done(self) -> None:
-        """把已执行/被压制的意向移出队列，避免影响队列状态判断。"""
-
-        before = len(self._queue)
-        self._queue = [x for x in self._queue if getattr(x, "status", None) == "pending"]
-        if len(self._queue) != before:
-            print(
-                f"[agents/controller.py] 🧹 清理了 {before - len(self._queue)} 条已完成/被压制的意向，剩余 {len(self._queue)} 条待处理。"
-            )
-
-    def pop_one(self) -> Intention | None:
-        for x in self._queue:
-            if x.status == "pending":
-                print(
-                    f"[agents/controller.py] 📬 发现排队的意向 {x.intention_id}，准备交给调度器。"
-                )
-                return x
-        print("[agents/controller.py] 🧘 队列空了。")
-        return None
-
-    def seed_demo_intentions(self):
-        # demo：让第一个 agent 产生一条 speak
-        a = self.agents[0]
-        it = Intention(
-            intention_id=str(uuid4()),
-            agent_id=a.id,
-            kind="speak",
-            payload={"text": f"我是 {a.name}，系统开始跑了。"},
-            scope=a.scope,
-            candidate_references=[],
-            references=[],
-            completed=True,
-            urgency=0.1,
-        )
-        self._queue.append(it)
-        print(
-            f"[agents/controller.py] 🎤 给 {a.name} 塞了一条初始意向 {it.intention_id}，模拟让第一个 agent 产生一条 speak。"
-        )
+    def _latest_store_event(self) -> Optional[Dict[str, Any]]:
+        if self.query is None:
+            return None
+        recent = self.query.last_n(1)
+        if not recent:
+            return None
+        ev = recent[0]
+        return ev.__dict__ if hasattr(ev, "__dict__") else dict(ev)
