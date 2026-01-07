@@ -30,6 +30,7 @@ class RuntimeConfig:
 
     enable_llm: bool = False
     llm_client: Optional[object] = None  # 先占位
+    llm_mode: str = "async"
     allow_empty_policy: bool = False
 
     # Store/session
@@ -142,7 +143,7 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     # proposer = IntentionProposer(enable_llm=cfg.enable_llm, llm_client=cfg.llm_client)
     # interpreter = IntentInterpreter(policy_path=cfg.policy_path)  # 你现在 Interpreter 读 yaml
     proposer = IntentionProposer(
-        config=ProposerConfig(enable_llm=cfg.enable_llm),
+        config=ProposerConfig(enable_llm=cfg.enable_llm, llm_mode=cfg.llm_mode),
         llm_client=cfg.llm_client,
     )
     interpreter = IntentInterpreter(

@@ -1,10 +1,14 @@
 # agents/proposer.py
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from events.intention_schemas import IntentionDraft, RetrievalInstruction
+from llm.client import LLMRequestOptions
+from llm.prompts import build_intention_prompt
+from llm.schemas import parse_intention_draft
 from uuid import uuid4
 
 
@@ -39,6 +43,7 @@ class ProposerHints:
 class ProposerConfig:
     enable_llm: bool = False        # 是否启用 LLM
     allow_speak_replies: bool = True
+    llm_mode: str = "async"
 
     max_intentions_per_event: int = 2
 
@@ -152,7 +157,43 @@ class IntentionProposer:
         - 要求 LLM 输出 Intention JSON
         - parse + validate
         """
-        raise NotImplementedError("LLM proposer not wired yet")
+        if self.llm_client is None:
+            raise RuntimeError("⚠️LLM client 未注入，无法走 LLM 流程")
+
+        messages = build_intention_prompt(
+            agent_name=context.agent_name,
+            agent_role=context.agent_role,
+            trigger_event=context.trigger_event,
+            phase="draft",
+        )
+        options = LLMRequestOptions(stream=self.config.llm_mode == "stream")
+
+        if self.config.llm_mode == "async":
+            content = asyncio.run(self.llm_client.acomplete(messages, options=options))
+        elif self.config.llm_mode == "stream":
+            content = "".join(self.llm_client.stream(messages, options=options))
+        else:
+            content = self.llm_client.complete(messages, options=options)
+
+        try:
+            draft = parse_intention_draft(content)
+        except Exception as exc:  # noqa: BLE001 - LLM 输出可能不稳定
+            print(
+                "[agents/proposer.py] ⚠️ LLM 输出解析失败，回退规则模式：",
+                f"{type(exc).__name__}: {exc}",
+            )
+            return self._propose_with_rules(context)
+
+        if not draft.retrieval_plan:
+            draft.retrieval_plan = [
+                RetrievalInstruction(
+                    name="fallback-thread",
+                    after_event_id=context.trigger_event.get("event_id"),
+                    thread_depth=1,
+                    scope=context.trigger_event.get("scope") or context.scope,
+                )
+            ]
+        return [draft], ProposerHints()
 
     # ---------- 公共校验 / 裁剪 ----------
 

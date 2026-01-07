@@ -1,5 +1,8 @@
 # main.py
 import argparse
+
+from config.settings import load_settings
+from llm.client import build_openai_client_from_settings
 from runtime.bootstrap import RuntimeConfig, bootstrap
 from agents.agent import Agent
 
@@ -8,7 +11,8 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--policy", default="policies/intent_constraint.yaml")
     p.add_argument("--max-ticks", type=int, default=50)
-    p.add_argument("--enable-llm", action="store_true")
+    p.add_argument("--enable-llm", action="store_true", default=None)
+    p.add_argument("--disable-llm", action="store_false", dest="enable_llm")
     p.add_argument("--data-dir", default="data/sessions", help="session 落盘目录")
     p.add_argument(
         "--allow-empty-policy",
@@ -47,6 +51,7 @@ def _build_agents():
 
 
 def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
+    settings = load_settings()
     boss, alice, bob = _build_agents()
 
     seed = boss.request_anyone("请大家给出系统下一步的最小可运行闭环建议")
@@ -54,10 +59,15 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         f"[main.py] 🌱 生成种子事件: {seed.get('event_id', '<no-id>')} from {seed.get('sender')}"
     )
 
+    enable_llm = settings.llm_enabled if args.enable_llm is None else args.enable_llm
+    llm_client = build_openai_client_from_settings(settings) if enable_llm else None
+
     cfg = RuntimeConfig(
         agents=[boss, alice, bob],
         policy_path=args.policy,
-        enable_llm=args.enable_llm,
+        enable_llm=enable_llm,
+        llm_client=llm_client,
+        llm_mode=settings.llm_mode,
         allow_empty_policy=args.allow_empty_policy,
         max_ticks=args.max_ticks,
         data_dir=args.data_dir,

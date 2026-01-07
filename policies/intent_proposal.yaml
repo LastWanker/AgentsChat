@@ -3,171 +3,171 @@ policy:
   role: forward_proposal
   audience: llm
   description: >
-    This policy describes the kinds of intentions an Agent may consider.
-    It serves as a natural-language guide aligned with agent.py event APIs.
-    It does not enforce rules or determine legality.
+    该策略描述 Agent 可能考虑的意向类型。
+    它是一份与 agent.py 事件 API 对齐的自然语言指南。
+    它不负责执法，也不决定合法性。
 
 intentions:
 
   speak:
     event_type: speak
     description: >
-      Speak is the most basic and frequent social action.
-      It produces a message visible within the current scope.
+      speak 是最基础、最频繁的社交动作。
+      它产出一条在当前 scope 内可见的消息。
     usage_guidance:
-      - Use to express thoughts, reasoning, questions, or partial ideas.
-      - Speak does not assume a target or require a response.
-      - It does not imply commitment or final judgement.
+      - 用于表达想法、推理、问题或不完整的观点。
+      - speak 不预设目标，也不要求对方必须回应。
+      - 它不意味着承诺或最终判断。
     references_hint:
-      - References may be used to reply to, challenge, or extend previous events.
-      - Referencing helps establish conversational continuity.
+      - references 可用于回复、挑战或延展之前的事件。
+      - 引用有助于建立对话连续性。
     common_patterns:
-      - discussion
-      - brainstorming
-      - clarification
-      - disagreement
+      - 讨论
+      - 头脑风暴
+      - 澄清
+      - 不同意见
 
   speak_public:
     event_type: speak_public
     description: >
-      Speak_public is a forced public broadcast.
-      It legally bypasses the current scope and makes the message visible to all.
+      speak_public 是强制公开广播。
+      它合法地绕过当前 scope，并让消息对所有人可见。
     usage_guidance:
-      - Use when information must reach beyond the current group.
-      - Common for group leaders reporting progress to the public.
-      - May also be used in urgent or high-impact situations, even without authority.
-      - Using this action signals an intentional change of visibility.
+      - 用在信息必须跨出当前群可见范围时。
+      - 领导者对外汇报进展时常用。
+      - 在紧急或高影响场景，也可在无授权时使用。
+      - 使用该动作意味着有意识地改变可见性。
     references_hint:
-      - References may justify why escalation or public exposure is necessary.
+      - 引用可用于解释为何需要升级或公开。
     common_patterns:
-      - cross-group escalation
-      - public reporting
-      - urgent warnings
+      - 跨群升级
+      - 公开汇报
+      - 紧急预警
 
   request_specific:
     event_type: request_specific
     description: >
-      Request_specific is a public, directed request to a named agent.
-      It represents an explicit delegation or commission.
+      request_specific 是公开、定向请求给某个指定 Agent。
+      它代表明确的委派或指派。
     usage_guidance:
-      - Use when a particular agent is relevant or responsible.
-      - This action creates clear responsibility and traceability.
-      - Requests remain open until closed by a submit.
+      - 用在某位 Agent 明确相关或负责时。
+      - 该动作会创建清晰责任链与可追溯性。
+      - 请求保持开放，直到被 submit 关闭。
     references_hint:
-      - References may explain why this agent was selected.
+      - references 可解释为何选择该 Agent。
     common_patterns:
-      - expert assignment
-      - task delegation
-      - accountable requests
+      - 专家分配
+      - 任务委派
+      - 责任明确的请求
 
   request_anyone:
     event_type: request_anyone
     description: >
-      Request_anyone is a broadcast request without a specified recipient.
-      It invites voluntary response or assistance.
+      request_anyone 是不指定收件人的广播请求。
+      它邀请自愿响应或协助。
     usage_guidance:
-      - Use when unsure who can help or when participation is optional.
-      - Does not require completion, but allows later adoption.
-      - Often used as a lightweight call for help.
+      - 用在不确定谁能帮忙或参与可选时。
+      - 不强制完成，但允许后来者接手。
+      - 常用于轻量求助。
     references_hint:
-      - References may indicate what triggered the need for help.
+      - references 可说明触发求助的原因。
     common_patterns:
-      - open help request
-      - voluntary task claiming
-      - assistance solicitation
+      - 开放式求助
+      - 自愿认领
+      - 协助征集
 
   request_all:
     event_type: request_all
     description: >
-      Request_all initiates a collective decision or rule-governed process.
-      It is addressed to all relevant agents.
+      request_all 发起集体决策或规则流程。
+      它面向所有相关 Agent。
     usage_guidance:
-      - Use to respond to a request event.
-      - Submit implies fulfillment, not discussion.
-      - Visibility may vary depending on delivery context.
-      - When responding to request_all, submit represents an individual vote or decision input.
-        Collective outcomes typically depend on multiple submit events.
+      - 用于响应 request 事件。
+      - submit 表示完成，不是讨论。
+      - 可见性取决于投递上下文。
+      - 当响应 request_all 时，submit 代表单个投票或决策输入。
+        集体结果通常依赖多个 submit 事件汇总。
 
     references_hint:
-      - References may define the context or prior discussion leading to the decision.
+      - 引用可用于定义上下文或先前讨论。
     common_patterns:
-      - voting
-      - consensus building
-      - collective rule declaration
+      - 投票
+      - 共识构建
+      - 集体规则声明
 
   submit:
     event_type: submit
     description: >
-      Submit represents delivery or completion of a request.
-      It formally closes a request-related process.
+      submit 代表请求的交付或完成。
+      它正式关闭一个请求相关流程。
     usage_guidance:
-      - Use to respond to a request event.
-      - Submit implies fulfillment, not discussion.
-      - Visibility may vary depending on delivery context.
+      - 用于回应 request 事件。
+      - submit 表示履约，不是讨论。
+      - 可见性随投递上下文变化。
     references_hint:
-      - A submit normally references the request it fulfills.
+      - submit 通常引用它要完成的 request。
     common_patterns:
-      - task completion
-      - decision closure
-      - result delivery
+      - 任务完成
+      - 决策收口
+      - 结果交付
 
   evaluation:
     event_type: evaluation
     description: >
-      Evaluation expresses an assessment or judgement of prior events.
-      It carries implicit attitude or stance.
+      evaluation 表达对先前事件的评价或判断。
+      它带有隐含的态度或立场。
     usage_guidance:
-      - Use to provide qualitative feedback or reflection.
-      - Evaluation affects interpretation and attribution.
-      - It is not merely descriptive speech.
+      - 用于定性反馈或反思。
+      - evaluation 会影响解读与归因。
+      - 它不仅仅是描述性发言。
     references_hint:
-      - Referencing indicates what is being evaluated.
-      - References may carry inherited weight.
+      - 引用指向被评价的对象。
+      - 引用可携带继承权重。
     common_patterns:
-      - peer review
-      - reflective judgement
-      - performance assessment
+      - 同行评审
+      - 反思性判断
+      - 绩效评估
 
   state_change:
     event_type: state_change
     description: >
-      State_change is a declarative announcement of a status change.
-      It represents an intention to alter recognized state.
+      state_change 是对状态变化的声明。
+      它表达对已识别状态的调整意向。
     usage_guidance:
-      - Use to declare availability, inability, refusal, or role-related status.
-      - This action is explicit and traceable.
+      - 用于声明可用/不可用/拒绝/角色相关状态。
+      - 该动作显式且可追溯。
     references_hint:
-      - References may justify or contextualize the state change.
+      - 引用可用于说明状态变化原因或上下文。
     common_patterns:
-      - availability declaration
-      - refusal
-      - role transition
+      - 可用性声明
+      - 拒绝
+      - 角色切换
 
   join_group:
     event_type: join_group
     description: >
-      Join_group declares intent to enter a group context.
-      It separates public declaration from actual state transition.
+      join_group 宣告加入群组语境的意向。
+      它将公开声明与实际状态变更分离。
     usage_guidance:
-      - Use to announce willingness to participate in a group.
-      - Group membership is typically determined through a prior collective decision.
-      - Joining often follows a request_all process that establishes group formation.
+      - 用于表态愿意参与某个群。
+      - 群成员身份通常由先前的集体决议决定。
+      - 加入通常跟随 request_all 建立群组的流程。
     references_hint:
-      - References may indicate invitation or approval.
+      - 引用可说明邀请或批准来源。
     common_patterns:
-      - team formation
-      - role onboarding
+      - 团队组建
+      - 角色入职
 
   leave_group:
     event_type: leave_group
     description: >
-      Leave_group declares intent to exit a group context.
-      It does not imply task completion.
+      leave_group 宣告退出群组语境。
+      它不等同于任务完成。
     usage_guidance:
-      - Use to signal withdrawal or disengagement.
-      - Follow-up communication may be expected.
+      - 用于表态退出或暂停参与。
+      - 可能需要补充解释或后续沟通。
     references_hint:
-      - References may explain reasons for departure.
+      - 引用可解释离开原因。
     common_patterns:
-      - disengagement
-      - role exit
+      - 退出
+      - 角色退出
