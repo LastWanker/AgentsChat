@@ -164,6 +164,8 @@ class IntentionProposer:
             agent_name=context.agent_name,
             agent_role=context.agent_role,
             trigger_event=context.trigger_event,
+            recent_events=context.recent_events,
+            referenced_events=context.referenced_events,
             phase="draft",
         )
         options = LLMRequestOptions(stream=self.config.llm_mode == "stream")

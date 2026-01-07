@@ -10,6 +10,7 @@ class RuntimeLoop:
         router,
         max_ticks: int = 50,
         finalizer: IntentionFinalizer | None = None,
+        idle_wait_sec: float = 10.0,
     ):
         self.controller = controller
         self.scheduler = scheduler
@@ -17,6 +18,7 @@ class RuntimeLoop:
         self.max_ticks = max_ticks
         self._tick_index = 0
         self.finalizer = finalizer
+        self.idle_wait_sec = idle_wait_sec
 
     def tick(self):
         it, wait_sec = self.scheduler.choose(self.controller, loop_tick=self._tick_index)
@@ -30,8 +32,14 @@ class RuntimeLoop:
 
                     time.sleep(wait_sec)
                 return True
-            print(f"[runtime/loop.py] ⏸️ 队列里没人排队，说话暂停。")
-            return False
+            print(
+                f"[runtime/loop.py] ⏳ 队列空了，等待 {self.idle_wait_sec:.2f}s 看看是否有新的意向。"
+            )
+            if self.idle_wait_sec > 0:
+                import time
+
+                time.sleep(self.idle_wait_sec)
+            return True
 
         # 找到对应 agent
         agent = next(a for a in self.controller.agents if a.id == getattr(it, "agent_id", None))

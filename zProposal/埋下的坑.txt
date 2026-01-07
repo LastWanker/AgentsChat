@@ -58,3 +58,5 @@ FinalIntention（含 references + 自然语言）
 [runtime/loop.py] ⏸️ 队列里没人排队，说话暂停。
 [runtime/loop.py] 💤 没有新的意向要处理，提前收工。
 而且系统没有如预期那般根据冷却时间和现实时间慢吞吞的运行，还是一瞬间就完成运行了。
+
+九、暂时不是所有的event tpye都能派生。

@@ -54,6 +54,7 @@ class IntentionDraft:
 
     kind: str
     message_plan: str
+    draft_text: str = ""
     retrieval_plan: List[RetrievalInstruction] = field(default_factory=list)
     target_scope: Optional[str] = None
     visibility: Optional[str] = None
@@ -68,6 +69,8 @@ class IntentionDraft:
 
     def __post_init__(self) -> None:
         self.retrieval_plan = [self._ensure_instruction(p) for p in self.retrieval_plan]
+        if not self.draft_text:
+            self.draft_text = self.message_plan
 
     @staticmethod
     def _ensure_instruction(plan: RetrievalInstruction | Dict[str, Any]) -> RetrievalInstruction:
@@ -82,6 +85,7 @@ class IntentionDraft:
         return cls(
             kind=raw["kind"],
             message_plan=raw.get("message_plan", ""),
+            draft_text=raw.get("draft_text", raw.get("text", raw.get("message_plan", ""))),
             retrieval_plan=raw.get("retrieval_plan", []),
             target_scope=raw.get("target_scope"),
             visibility=raw.get("visibility"),
@@ -91,6 +95,7 @@ class IntentionDraft:
         return {
             "kind": self.kind,
             "message_plan": self.message_plan,
+            "draft_text": self.draft_text,
             "retrieval_plan": [p.to_dict() for p in self.retrieval_plan],
             "target_scope": self.target_scope,
             "visibility": self.visibility,

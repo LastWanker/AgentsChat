@@ -30,7 +30,7 @@ class IntentionFinalizer:
         # Final 阶段：references 必须来自 resolver 返回的候选 event_id
         final = FinalIntention(
             kind=draft.kind,
-            payload={"text": draft.message_plan},
+            payload=self._payload_for_kind(draft),
             references=candidate_refs,
             candidate_references=candidate_refs,
             target_scope=draft.target_scope,
@@ -42,3 +42,17 @@ class IntentionFinalizer:
             intention_id=intention_id,
             scope=draft.target_scope,
         )
+
+    @staticmethod
+    def _payload_for_kind(draft: IntentionDraft) -> dict:
+        kind = (draft.kind or "").lower()
+        message = draft.draft_text or draft.message_plan
+        if kind in ("speak", "speak_public"):
+            return {"text": message}
+        if kind == "submit":
+            return {"result": message}
+        if kind == "evaluation":
+            return {"score": message}
+        if kind in ("request_anyone", "request_specific", "request_all"):
+            return {"request": message}
+        return {"text": message}

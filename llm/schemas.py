@@ -9,10 +9,11 @@ from events.intention_schemas import IntentionDraft
 INTENTION_DRAFT_SCHEMA: Dict[str, Any] = {
     "title": "意向草稿",
     "type": "object",
-    "required": ["kind", "message_plan", "retrieval_plan"],
+    "required": ["kind", "message_plan", "draft_text", "retrieval_plan"],
     "properties": {
         "kind": {"type": "string", "description": "意向类型，如 speak/submit"},
         "message_plan": {"type": "string", "description": "行动/回复计划"},
+        "draft_text": {"type": "string", "description": "面向群内其他成员的草稿文本（我打算说/提交的内容）"},
         "retrieval_plan": {
             "type": "array",
             "items": {
@@ -48,7 +49,15 @@ INTENTION_FINAL_SCHEMA: Dict[str, Any] = {
                 "required": ["event_id"],
                 "properties": {
                     "event_id": {"type": "string"},
-                    "weight": {"type": "object"},
+                        "weight": {
+                        "type": "object",
+                        "description": "引用权重：stance(-1..1, 反对到支持)，inspiration(0..1, 启发程度)，dependency(0..1, 依赖程度)",
+                        "properties": {
+                            "stance": {"type": "number"},
+                            "inspiration": {"type": "number"},
+                            "dependency": {"type": "number"},
+                        },
+                    },
                 },
             },
         },

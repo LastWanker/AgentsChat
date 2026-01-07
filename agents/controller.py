@@ -106,6 +106,14 @@ class AgentController:
             ]
             return cands
 
+            # ---- speak/speak_public：允许对话延续（排除发言者） ----
+        if etype in ("speak", "speak_public"):
+            cands = [
+                a for a in self.agents
+                if a.id != sender_id and self._is_visible(scope, a.scope)
+            ]
+            return cands
+
         # 默认：其它事件不派生（避免刷屏）
         return []
 
