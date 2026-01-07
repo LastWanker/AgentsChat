@@ -1,4 +1,4 @@
-"""LLM 群聊 demo：需要环境变量 LLM_ENABLED=1 与 LLM_API_KEY。"""
+"""LLM 群聊 demo：需要环境变量 LLM_ENABLED=1 与 LLM_API_KEY（或 config_data/llm.env）。"""
 from pathlib import Path
 
 from agents.agent import Agent
@@ -37,7 +37,7 @@ def main():
         enable_llm=True,
         llm_client=llm_client,
         llm_mode=settings.llm_mode,
-        max_ticks=6,
+        max_ticks=20,
         seed_events=[seed],
         allow_empty_policy=True,
     )

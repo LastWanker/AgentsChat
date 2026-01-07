@@ -2,6 +2,31 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+
+_ENV_FILE = Path(__file__).resolve().parent.parent / "config_data" / "llm.env"
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#"):
+            continue
+        if raw.startswith("export "):
+            raw = raw[len("export ") :].lstrip()
+        if "=" not in raw:
+            continue
+        key, _, value = raw.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
 
 
 def _get_env_bool(key: str, default: bool) -> bool:
@@ -52,6 +77,7 @@ class AppSettings:
 
 
 def load_settings() -> AppSettings:
+    _load_env_file(_ENV_FILE)
     return AppSettings(
         llm_enabled=_get_env_bool("LLM_ENABLED", False),
         llm_api_key=os.getenv("LLM_API_KEY"),
