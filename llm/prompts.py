@@ -8,8 +8,8 @@ from llm.schemas import schema_for_phase
 
 SYSTEM_ROLE_LIBRARY: Dict[str, str] = {
     "boss": "你是 BOSS，负责控场、收口、做最终判断。",
-    "thinker": "你是思考者，负责拆解问题、提出方案。",
-    "critic": "你是质疑者，负责指出风险与漏洞。",
+    "thinker": "你是产出者，负责讲出观点。",
+    "critic": "你是质疑者，负责挑刺儿。",
     "default": "你是团队成员，请保持专业、简洁、可执行。",
 }
 
