@@ -1,0 +1,113 @@
+F:\GitHub\AgentsChat\.venv\Scripts\python.exe F:\GitHub\AgentsChat\main.py
+[main.py] 🧭 解析到的参数: {'policy': 'policies/intent_constraint.yaml', 'max_ticks': 50, 'enable_llm': None, 'data_dir': 'data/sessions', 'session_id': None, 'resume': None, 'allow_empty_policy': False}
+[main.py] 🤖 准备创建默认的三人小队：BOSS/Alice/Bob。
+[main.py]   ↳ Agent BOSS (role=boss, expertise=['authority'], id=3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2) 已就绪。
+[main.py]   ↳ Agent Alice (role=thinker, expertise=['logic'], id=74efad95-517c-41f0-9a26-d6376ba5d4d8) 已就绪。
+[main.py]   ↳ Agent Bob (role=critic, expertise=['debate'], id=16530b80-3759-400e-9b92-d2dd11d90aba) 已就绪。
+[main.py] 🌱 生成种子事件: db0959cf-3ff3-4e3d-9e8a-aae362e7b489 from 3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2
+[main.py] 🛠️ RuntimeConfig 已创建: {'policy_path': 'policies/intent_constraint.yaml', 'max_ticks': 50, 'data_dir': 'data/sessions', 'session_id': None, 'resume_session_id': None, 'cooldowns': {'Alice': 1.5, 'Bob': 1.5}, 'seed_events': 1}
+[main.py] 🚀 开始 bootstrap，搭建完整运行时…
+[events/store.py] 🗂️ session=2026-01-07T12-49-41Z__14f36b26 就绪，目录 data\sessions\2026-01-07T12-49-41Z__14f36b26。
+[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery，session=2026-01-07T12-49-41Z__14f36b26。
+[runtime/bootstrap.py] 🌍 World 构建完成，准备接线各路组件。
+[agents/interpreter.py] 📖 装载策略 policies/intent_constraint.yaml 完成，定义了 9 种意向规则。
+[runtime/bootstrap.py] 🧠 IntentionProposer 与 IntentInterpreter 已就绪。
+[runtime/bootstrap.py] 🔌 Scheduler/Router/Controller/Loop 全部完成装配。
+[platform/world.py] 👂 注册观察者 3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2，当前总数 1。
+[platform/world.py] 👂 注册观察者 74efad95-517c-41f0-9a26-d6376ba5d4d8，当前总数 2。
+[platform/world.py] 👂 注册观察者 16530b80-3759-400e-9b92-d2dd11d90aba，当前总数 3。
+[runtime/bootstrap.py] 👀 已为 3 个 Agent 接入世界观察通道。
+[platform/world.py] 👂 注册观察者 agent_controller，当前总数 4。
+[runtime/bootstrap.py] 🛰️ AgentController 也开始观察世界事件。
+[platform/world.py] 👂 注册观察者 request_completion_observer，当前总数 5。
+[runtime/bootstrap.py] ✅ RequestCompletionObserver 启用，负责宣告请求完成。
+[runtime/bootstrap.py] 🌱 收到 dict 类型 seed，准备规范化： {'event_id': 'db0959cf-3ff3-4e3d-9e8a-aae362e7b489', 'type': 'request_anyone', 'timestamp': '2026-01-07T12:49:41.858867+00:00', 'sender': '3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2', 'recipients': [], 'scope': 'public', 'content': {'request': '请大家给出系统下一步的最小可运行闭环建议'}, 'references': [], 'metadata': {'forced_scope': 'public'}, 'completed': False}
+[runtime/bootstrap.py] ✅ 规范化完成，生成 Event： db0959cf-3ff3-4e3d-9e8a-aae362e7b489
+[events/store.py] 🗃️ 收纳事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489，类型 request_anyone。
+[platform/world.py] 🌐 收到事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489，准备通知观察者。
+[platform/world.py] 📡 事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489 对 3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2 可见，派发中。
+[agents/agent.py] 👁️  Agent BOSS 记录看到的事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489，当前记忆 1 条。
+[platform/world.py] 📡 事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489 对 74efad95-517c-41f0-9a26-d6376ba5d4d8 可见，派发中。
+[agents/agent.py] 👁️  Agent Alice 记录看到的事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489，当前记忆 1 条。
+[platform/world.py] 📡 事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489 对 16530b80-3759-400e-9b92-d2dd11d90aba 可见，派发中。
+[agents/agent.py] 👁️  Agent Bob 记录看到的事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489，当前记忆 1 条。
+[platform/world.py] 📡 事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489 对 agent_controller 可见，派发中。
+[agents/controller.py] 🧩 收到事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489，为 Alice 入队草稿 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 (speak)
+[agents/controller.py] 🧩 收到事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489，为 Bob 入队草稿 f0f22d3a-9797-4b1b-9313-7410696b7c1f (speak)
+[platform/world.py] 📡 事件 db0959cf-3ff3-4e3d-9e8a-aae362e7b489 对 request_completion_observer 可见，派发中。
+[runtime/bootstrap.py] 🌱 预置种子事件 1 条已注入世界。
+[main.py] 🧩 bootstrap 完成，世界已有观察者 5 个，store session=2026-01-07T12-49-41Z__14f36b26。
+[main.py] 🔄 即将以 max_ticks=50 运行 loop，当前 world.events=1。
+[runtime/loop.py] ▶️ 开始循环跑 50 轮，看看会发生什么。
+[runtime/scheduler.py] 🎲 把 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 排到前台，由 74efad95-517c-41f0-9a26-d6376ba5d4d8 先上麦。
+[runtime/loop.py] 🎯 抽中了 Alice 的意向 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89，类型是 speak。
+[runtime/loop.py] 🔍 发现草稿 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89，进入两段式流程：先交给 finalizer 解析引用再路由。
+[events/intention_finalizer.py] 🧭 进入两段式生成的第二段：为草稿 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 解析引用。 检索计划 3 条。
+[events/reference_resolver.py] 🔍 准备执行两段式的引用解析，草稿 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 有 3 条检索指令。
+[events/reference_resolver.py] 📡 执行检索指令 项目背景与目标，scope=public, keywords=['系统目标', '当前状态', '问题', '需求'], after_event_id=-, thread_depth=1.
+[events/reference_resolver.py] 📡 执行检索指令 现有系统组件，scope=public, keywords=['组件', '模块', '功能', '接口'], after_event_id=-, thread_depth=0.
+[events/reference_resolver.py] 📡 执行检索指令 团队能力与资源，scope=public, keywords=['技能', '资源', '时间', '约束'], after_event_id=3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2, thread_depth=0.
+[events/store.py] ⚠️ 未在索引中找到事件 3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2，返回 None。
+[events/reference_resolver.py] 🧮 检索完成，草稿 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 收集到 0 条候选引用（去重后）。
+[events/intention_finalizer.py] 🏁 草稿 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 的引用解析完成，拿到 0 条候选引用。
+[FinalIntention] warning: created without references; downstream consumers should ensure evidence is attached
+[runtime/loop.py] ✅ 草稿 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 完成 final 阶段，已转换成可路由的意向。
+[platform/router.py] 📨 收到 Alice 的意向 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89，先让解释器看看。 payload: 我将首先拆解'最小可运行闭环'这个核心概念，然后提出一个分步实施的方案框架，包括：1) 明确闭环的目标与范围；2) 识别关键输入与输出；3) 设计核心反馈机制；4) 确定最小资源需求。我会邀请团队补充具体细节。
+[agents/interpreter.py] 🔎 开始审查意向 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 类型 speak，来自 Alice。
+[agents/interpreter.py] ✅ 意向 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 通过审查。
+[platform/router.py] ✅ 意向 11a31fc3-cbfc-4ca1-ba97-6b32ef96dd89 通过，转换成事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4，准备广播。 payload: 我将首先拆解'最小可运行闭环'这个核心概念，然后提出一个分步实施的方案框架，包括：1) 明确闭环的目标与范围；2) 识别关键输入与输出；3) 设计核心反馈机制；4) 确定最小资源需求。我会邀请团队补充具体细节。
+[events/store.py] 🗃️ 收纳事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4，类型 speak。
+[platform/world.py] 🌐 收到事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4，准备通知观察者。
+[platform/world.py] 📡 事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4 对 3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2 可见，派发中。
+[agents/agent.py] 👁️  Agent BOSS 记录看到的事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4，当前记忆 2 条。
+[platform/world.py] 📡 事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4 对 74efad95-517c-41f0-9a26-d6376ba5d4d8 可见，派发中。
+[agents/agent.py] 👁️  Agent Alice 记录看到的事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4，当前记忆 2 条。
+[platform/world.py] 📡 事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4 对 16530b80-3759-400e-9b92-d2dd11d90aba 可见，派发中。
+[agents/agent.py] 👁️  Agent Bob 记录看到的事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4，当前记忆 2 条。
+[platform/world.py] 📡 事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4 对 agent_controller 可见，派发中。
+[agents/controller.py] ⚠️ 事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4 没有合适的 Agent 响应，暂不处理。
+[platform/world.py] 📡 事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4 对 request_completion_observer 可见，派发中。
+[platform/router.py] 📣 事件 d29ed6b0-8f19-439e-a38a-1d89939ad0b4 已送入世界，大家随意围观。
+[runtime/scheduler.py] 🎲 把 f0f22d3a-9797-4b1b-9313-7410696b7c1f 排到前台，由 16530b80-3759-400e-9b92-d2dd11d90aba 先上麦。
+[runtime/loop.py] 🎯 抽中了 Bob 的意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f，类型是 speak。
+[runtime/loop.py] 🔍 发现草稿 f0f22d3a-9797-4b1b-9313-7410696b7c1f，进入两段式流程：先交给 finalizer 解析引用再路由。
+[events/intention_finalizer.py] 🧭 进入两段式生成的第二段：为草稿 f0f22d3a-9797-4b1b-9313-7410696b7c1f 解析引用。 检索计划 2 条。
+[events/reference_resolver.py] 🔍 准备执行两段式的引用解析，草稿 f0f22d3a-9797-4b1b-9313-7410696b7c1f 有 2 条检索指令。
+[events/reference_resolver.py] 📡 执行检索指令 查找类似项目历史，scope=public, keywords=['最小可行产品', '闭环', '系统建议', '技术债务'], after_event_id=-, thread_depth=2.
+[events/reference_resolver.py] 📡 执行检索指令 查找风险评估记录，scope=public, keywords=['风险', '漏洞', '过早优化', '单点故障'], after_event_id=-, thread_depth=0.
+[events/reference_resolver.py] 🧮 检索完成，草稿 f0f22d3a-9797-4b1b-9313-7410696b7c1f 收集到 1 条候选引用（去重后）。
+[events/intention_finalizer.py] 🏁 草稿 f0f22d3a-9797-4b1b-9313-7410696b7c1f 的引用解析完成，拿到 1 条候选引用。
+[runtime/loop.py] ✅ 草稿 f0f22d3a-9797-4b1b-9313-7410696b7c1f 完成 final 阶段，已转换成可路由的意向。
+[platform/router.py] ⏳ Bob 的意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f 触发 cooldown，暂不处理。
+[runtime/loop.py] 🔁 意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f 因冷却被暂缓，已重新入队等待下一轮。
+[runtime/scheduler.py] ⚠️ 意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f 仍在冷却 1.00s，本轮不调度。
+[runtime/scheduler.py] ⏳ 队列里都是冷却/延期中的意向，等待下一次重试。
+[runtime/loop.py] ⏸️ 队列里没人立即可用，但有人在冷却，等待 1.00s 再试。
+[runtime/scheduler.py] 🎲 把 f0f22d3a-9797-4b1b-9313-7410696b7c1f 排到前台，由 16530b80-3759-400e-9b92-d2dd11d90aba 先上麦。
+[runtime/loop.py] 🎯 抽中了 Bob 的意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f，类型是 speak。
+[platform/router.py] 📨 收到 Bob 的意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f，先让解释器看看。 payload: 我将指出这个请求可能存在的风险：要求'最小可运行闭环建议'虽然目标明确，但可能过于简化复杂系统。我们需要警惕过早优化、忽略长期技术债务、以及可能遗漏关键安全或合规要求。建议先明确'最小'的具体标准（功能范围、用户数量、数据规模等），并...
+[agents/interpreter.py] 🔎 开始审查意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f 类型 speak，来自 Bob。
+[agents/interpreter.py] ✅ 意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f 通过审查。
+[platform/router.py] ✅ 意向 f0f22d3a-9797-4b1b-9313-7410696b7c1f 通过，转换成事件 c3687f9d-d18f-4cc2-bf64-13033e229514，准备广播。 payload: 我将指出这个请求可能存在的风险：要求'最小可运行闭环建议'虽然目标明确，但可能过于简化复杂系统。我们需要警惕过早优化、忽略长期技术债务、以及可能遗漏关键安全或合规要求。建议先明确'最小'的具体标准（功能范围、用户数量、数据规模等），并...
+[events/store.py] 🗃️ 收纳事件 c3687f9d-d18f-4cc2-bf64-13033e229514，类型 speak。
+[platform/world.py] 🌐 收到事件 c3687f9d-d18f-4cc2-bf64-13033e229514，准备通知观察者。
+[platform/world.py] 📡 事件 c3687f9d-d18f-4cc2-bf64-13033e229514 对 3ea0ccf0-c270-49ae-aa4b-fddf9e86bfb2 可见，派发中。
+[agents/agent.py] 👁️  Agent BOSS 记录看到的事件 c3687f9d-d18f-4cc2-bf64-13033e229514，当前记忆 3 条。
+[platform/world.py] 📡 事件 c3687f9d-d18f-4cc2-bf64-13033e229514 对 74efad95-517c-41f0-9a26-d6376ba5d4d8 可见，派发中。
+[agents/agent.py] 👁️  Agent Alice 记录看到的事件 c3687f9d-d18f-4cc2-bf64-13033e229514，当前记忆 3 条。
+[platform/world.py] 📡 事件 c3687f9d-d18f-4cc2-bf64-13033e229514 对 16530b80-3759-400e-9b92-d2dd11d90aba 可见，派发中。
+[agents/agent.py] 👁️  Agent Bob 记录看到的事件 c3687f9d-d18f-4cc2-bf64-13033e229514，当前记忆 3 条。
+[platform/world.py] 📡 事件 c3687f9d-d18f-4cc2-bf64-13033e229514 对 agent_controller 可见，派发中。
+[agents/controller.py] ⚠️ 事件 c3687f9d-d18f-4cc2-bf64-13033e229514 没有合适的 Agent 响应，暂不处理。
+[platform/world.py] 📡 事件 c3687f9d-d18f-4cc2-bf64-13033e229514 对 request_completion_observer 可见，派发中。
+[platform/router.py] 📣 事件 c3687f9d-d18f-4cc2-bf64-13033e229514 已送入世界，大家随意围观。
+[runtime/scheduler.py] 🙅‍♂️ 队列空空如也，没啥可调度的。
+[runtime/loop.py] ⏸️ 队列里没人排队，说话暂停。
+[runtime/loop.py] 💤 没有新的意向要处理，提前收工。
+
+[main.py] 🏁 运行结束：world.events=3，store 总事件=3。
+[main.py] 🧠 Agent BOSS 记忆 3 条: ['db0959cf-3ff3-4e3d-9e8a-aae362e7b489', 'd29ed6b0-8f19-439e-a38a-1d89939ad0b4', 'c3687f9d-d18f-4cc2-bf64-13033e229514']
+[main.py] 🧠 Agent Alice 记忆 3 条: ['db0959cf-3ff3-4e3d-9e8a-aae362e7b489', 'd29ed6b0-8f19-439e-a38a-1d89939ad0b4', 'c3687f9d-d18f-4cc2-bf64-13033e229514']
+[main.py] 🧠 Agent Bob 记忆 3 条: ['db0959cf-3ff3-4e3d-9e8a-aae362e7b489', 'd29ed6b0-8f19-439e-a38a-1d89939ad0b4', 'c3687f9d-d18f-4cc2-bf64-13033e229514']
+
+进程已结束，退出代码为 0

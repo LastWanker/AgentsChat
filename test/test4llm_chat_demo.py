@@ -29,7 +29,7 @@ def main():
     alice = Agent("Alice", role="thinker", expertise=["logic"])
     bob = Agent("Bob", role="critic", expertise=["debate"])
 
-    seed = boss.request_anyone("请大家用工作群的语气讨论：如何让系统跑得更稳？")
+    seed = boss.request_anyone("各位好。这次是个测试；alice收到后请向bob要求1+1的结果，bob可以针对这个问题进行一个submit。")
 
     cfg = RuntimeConfig(
         agents=[boss, alice, bob],
