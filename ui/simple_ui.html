@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgentsChat 简易 UI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      background: #f5f7fb;
+    }
+
+    body {
+      margin: 0;
+      padding: 32px 0;
+      display: flex;
+      justify-content: center;
+    }
+
+    .chat-shell {
+      width: min(960px, 92vw);
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 32px 28px 40px;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .message-row {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+      background: #1f2937;
+      color: #f9fafb;
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .bubble {
+      background: #f0f4ff;
+      border-radius: 16px 16px 16px 6px;
+      padding: 14px 18px;
+      max-width: 72%;
+      line-height: 1.6;
+      font-size: 16px;
+      color: #0f172a;
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.05);
+    }
+
+    .bubble.is-self {
+      background: #dff7e5;
+      border-radius: 16px 16px 6px 16px;
+      margin-left: auto;
+    }
+
+    .meta {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 6px;
+    }
+
+    .meta span + span::before {
+      content: "•";
+      margin: 0 6px;
+    }
+
+    .message-stack {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .notice {
+      align-self: center;
+      background: #94a3b8;
+      color: #ffffff;
+      padding: 6px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      letter-spacing: 0.2px;
+    }
+
+    .drafting {
+      font-style: italic;
+      color: #475569;
+    }
+
+    .message-row.is-self {
+      flex-direction: row-reverse;
+    }
+
+    .message-row.is-self .bubble {
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    .message-row.is-self .meta {
+      text-align: right;
+    }
+
+    .stack-gap {
+      height: 6px;
+    }
+  </style>
+</head>
+<body>
+  <main class="chat-shell">
+    <div class="notice">系统提示：会议开始，重要事项请置顶</div>
+
+    <div class="message-row">
+      <div class="avatar">林</div>
+      <div class="message-stack">
+        <div class="bubble">
+          大家好，今天我们集中讨论一下任务拆分和时间节点安排。我会把关键依赖整理出来。
+        </div>
+        <div class="meta">
+          <span>事件 ID: EVT-2024-001</span>
+          <span>引用: REQ-Alpha</span>
+          <span>权重: 0.75</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="message-row is-self">
+      <div class="avatar">你</div>
+      <div class="message-stack">
+        <div class="bubble is-self">
+          没问题，我来负责 UI 结构草图，并补充交互细节。
+        </div>
+        <div class="meta">
+          <span>事件 ID: EVT-2024-002</span>
+          <span>引用: EVT-2024-001</span>
+          <span>权重: 0.6</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="notice">必要通知：请在 18:00 前提交进度</div>
+
+    <div class="message-row">
+      <div class="avatar">周</div>
+      <div class="message-stack">
+        <div class="bubble drafting" id="drafting-bubble">
+          正在草拟意向...
+        </div>
+        <div class="meta">
+          <span>事件 ID: EVT-2024-003</span>
+          <span>引用: EVT-2024-002</span>
+          <span>权重: 0.4</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const draftingBubble = document.getElementById("drafting-bubble");
+    const statuses = [
+      "正在草拟意向...",
+      "正在组织语言...",
+      "正在检查引用...",
+      "正在合并信息...",
+      "即将发送..."
+    ];
+    let statusIndex = 0;
+
+    setInterval(() => {
+      statusIndex = (statusIndex + 1) % statuses.length;
+      draftingBubble.textContent = statuses[statusIndex];
+    }, 1800);
+  </script>
+</body>
+</html>
