@@ -2,7 +2,10 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Optional, Dict, List, Any
+from pathlib import Path
+from typing import Optional, Dict, List, Any, TextIO
+import atexit
+import sys
 from platform.world import World
 from platform.observers import AgentObserver
 from agents.controller import AgentController
@@ -64,6 +67,43 @@ class AppRuntime:
     router: Router
     controller: AgentController
     loop: RuntimeLoop
+
+
+class _TeeStream:
+    def __init__(self, stream: TextIO, log_file: TextIO, log_path: Path):
+        self._stream = stream
+        self._log_file = log_file
+        self._tee_log_path = log_path
+
+    def write(self, message: str) -> int:
+        self._log_file.write(message)
+        return self._stream.write(message)
+
+    def flush(self) -> None:
+        self._log_file.flush()
+        self._stream.flush()
+
+    def isatty(self) -> bool:
+        return getattr(self._stream, "isatty", lambda: False)()
+
+    @property
+    def encoding(self) -> str | None:
+        return getattr(self._stream, "encoding", None)
+
+
+def _enable_terminal_logging(session_dir: Path) -> None:
+    log_path = session_dir / "terminal.log"
+    log_file = log_path.open("a", encoding="utf-8")
+
+    def _wrap(stream: TextIO) -> TextIO:
+        if getattr(stream, "_tee_log_path", None) == log_path:
+            return stream
+        return _TeeStream(stream, log_file, log_path)
+
+    sys.stdout = _wrap(sys.stdout)
+    sys.stderr = _wrap(sys.stderr)
+    atexit.register(log_file.close)
+    print(f"[runtime/bootstrap.py] 🧾 终端日志将写入 {log_path}。")
 
 
 def _normalize_seed_event(seed: Any) -> Event:
@@ -137,6 +177,7 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         resume=cfg.resume_session_id is not None,
         metadata=session_meta,
     )
+    _enable_terminal_logging(store.session_dir)
     query = EventQuery(store)
     print(
         f"[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery，session={store.session_id}。"
