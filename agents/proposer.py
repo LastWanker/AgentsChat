@@ -22,6 +22,7 @@ class ProposerContext:
     scope: Optional[str]
 
     trigger_event: Dict[str, Any]
+    store: Optional[Any] = None
 
     # v0.31+ 可逐步填充
     recent_events: List[Dict[str, Any]] = field(default_factory=list)
@@ -252,6 +253,17 @@ class IntentionProposer:
     def _should_submit_for_request(
             self, event_scope: str, etype: str, context: ProposerContext
     ) -> bool:
+        if etype in ("request_anyone", "request_specific", "request_all"):
+            if context.trigger_event.get("completed") is True:
+                return False
+            event_id = context.trigger_event.get("event_id")
+            if context.store is not None and event_id:
+                try:
+                    stored_event = context.store.get(event_id)
+                except Exception:
+                    stored_event = None
+                if stored_event and getattr(stored_event, "completed", False):
+                    return False
         if etype == "request_all":
             if self._is_boss(context):
                 return False

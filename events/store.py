@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import uuid4
 
+from .id_generator import sync_event_id_counter
 from .references import normalize_references
 from .types import Event
 
@@ -77,6 +78,7 @@ class EventStore:
         offset, length = self._append_event_to_file(event)
         self._index[event.event_id] = self._index_entry(event, offset, length)
         self._persist_index()
+        self._sync_event_id_counter(event.event_id)
 
         if self._events_cache is not None:
             self._events_cache.append(event)
@@ -200,6 +202,7 @@ class EventStore:
                     continue
                 self._index[event.event_id] = self._index_entry(event, offset, len(line))
                 events.append(event)
+                self._sync_event_id_counter(event.event_id)
 
         self._persist_index()
         return events
@@ -215,6 +218,8 @@ class EventStore:
         if not self._index and self.events_path.exists():
             print("[events/store.py] ♻️ 未找到有效索引，正在从 events.jsonl 重建 index。")
             self._rebuild_index()
+        else:
+            self._sync_event_id_counter_from_index()
 
     def _rebuild_index(self) -> None:
         self._index = {}
@@ -237,6 +242,7 @@ class EventStore:
                         )
                         continue
                     self._index[eid] = self._index_entry(event, offset, len(line))
+                    self._sync_event_id_counter(eid)
                 except Exception as exc:
                     print(
                         f"[events/store.py] ⚠️ 解析 offset={offset} 时出错：{type(exc).__name__}:{exc}，跳过该行。"
@@ -249,6 +255,25 @@ class EventStore:
         self.index_path.write_text(
             json.dumps(self._index, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+    def _sync_event_id_counter(self, event_id: str) -> None:
+        try:
+            numeric_id = int(event_id)
+        except (TypeError, ValueError):
+            return
+        sync_event_id_counter(numeric_id + 1)
+
+    def _sync_event_id_counter_from_index(self) -> None:
+        max_id: Optional[int] = None
+        for key in self._index.keys():
+            try:
+                numeric_id = int(key)
+            except (TypeError, ValueError):
+                continue
+            if max_id is None or numeric_id > max_id:
+                max_id = numeric_id
+        if max_id is not None:
+            sync_event_id_counter(max_id + 1)
 
     # ---------- update helpers ----------
     def _upsert_event(self, event: Event) -> None:

@@ -146,6 +146,7 @@ class AgentController:
             agent_role=getattr(agent, "role", None),
             scope=getattr(agent, "scope", "public"),
             trigger_event=trigger_event,
+            store=self.store,
             recent_events=recent,
             referenced_events=referenced,
         )

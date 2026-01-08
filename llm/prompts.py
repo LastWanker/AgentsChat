@@ -34,12 +34,16 @@ def build_intention_prompt(
     system = (
         "你在一个工作群聊中参与讨论。"
         "输出必须是 JSON，且严格遵守给定 schema。"
-        "当触发事件类型为 request_anyone/request_specific/request_all 时，优先产出 kind=submit。"
+        "当触发事件为 request_* 且尚未 completed 时，优先产出 kind=submit。"
         "draft 阶段的 draft_text 表示你打算对群里说/提交的草稿内容。"
         "finalize 阶段必须生成面向其他成员的最终成文内容，不要输出“我打算做什么”。"
         "draft 阶段必须提供意愿三维：confidence(了解程度)、motivation(兴趣/意愿)、urgency(自我信息重要性)，范围 0~1。"
         "finalize 阶段必须为每条引用生成 weight：stance(-1..1, 反对到支持)、inspiration(0..1, 启发程度)、dependency(0..1, 依赖程度)。"
+        "引用必须覆盖所有对本次发言产生影响的事件（至少列出主要来源），每条引用的 weight 独立评估。"
+        "references 中只允许 event_id 与 weight 两个字段，不要附带原事件内容。"
         "submit 类型必须显式给出 stance/inspiration/dependency，不可省略。"
+        "event type 的选择必须与 message_plan 与 draft_text 保持一致："
+        "你打算说话就用 speak/speak_public，想提交结果就用 submit，想发起请求就用 request_*，想评价就用 evaluation。"
         "阶段为：{phase}。"
         "\n你的名字是：{agent_name}"
         "\n角色设定：{role_desc}"
@@ -56,6 +60,7 @@ def build_intention_prompt(
         f"sender={trigger_event.get('sender')}",
         f"type={trigger_event.get('type')}",
         f"scope={trigger_event.get('scope')}",
+        f"completed={trigger_event.get('completed')}",
         f"content={trigger_event.get('content', trigger_event.get('payload'))}",
         "最近事件（可参考）：",
         json.dumps(recent_events or [], ensure_ascii=False),

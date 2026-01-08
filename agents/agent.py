@@ -1,8 +1,8 @@
 # agent.py
-from uuid import uuid4
 from datetime import datetime, UTC
 from typing import List, Optional, Dict, Any
 
+from events.id_generator import next_event_id
 # 最后一次修改时间：2026年1月6日 16:23:39
 
 """
@@ -179,6 +179,9 @@ from events.types import Reference
 
 
 class Agent:
+    _AGENT_ID_COUNTER = 1
+    _BOSS_ASSIGNED = False
+
     def __init__(
             self,
             name: str,
@@ -187,7 +190,7 @@ class Agent:
             priority: float = 0.5,
     ):
         # Agent的系统级唯一身份。潜台词是：Agent 可以被销毁、重建、分布式迁移但 id 不依赖数据库、不依赖顺序、不依赖上下文
-        self.id = str(uuid4())
+        self.id = self._assign_agent_id(name, role)
 
         # 在Agent生命周期内不该频繁变化的属性。
         self.name = name
@@ -221,6 +224,16 @@ class Agent:
             "evaluation",
             "state_change",
         }
+
+    @classmethod
+    def _assign_agent_id(cls, name: str, role: str) -> str:
+        is_boss = (name or "").upper() == "BOSS" or (role or "").lower() == "boss"
+        if is_boss and not cls._BOSS_ASSIGNED:
+            cls._BOSS_ASSIGNED = True
+            return "0"
+        agent_id = str(cls._AGENT_ID_COUNTER)
+        cls._AGENT_ID_COUNTER += 1
+        return agent_id
 
     # ---------- 基础工具 ----------
     # Agent.memory 的唯一写入口，是 observe()
@@ -276,7 +289,7 @@ class Agent:
         scope = metadata.get("forced_scope", self.scope)
 
         event = {
-            "event_id": str(uuid4()),
+            "event_id": next_event_id(),
             "type": event_type,
             "timestamp": datetime.now(UTC).isoformat(),
             "sender": self.id,

@@ -1,9 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, TypedDict
-from uuid import uuid4
 from datetime import datetime, UTC
 
+from events.id_generator import next_event_id
 Scope = str  # "public" or "group:<id>"
 
 
@@ -69,7 +69,7 @@ def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
     from events.references import normalize_references
 
     return Event(
-        event_id=str(uuid4()),
+        event_id=next_event_id(),
         type=type,
         timestamp=datetime.now(UTC).isoformat(),
         sender=sender,

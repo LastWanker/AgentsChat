@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Optional, Dict, List, Any
-from uuid import uuid4
-
 from platform.world import World
 from platform.observers import AgentObserver
 from agents.controller import AgentController
@@ -14,6 +12,7 @@ from platform.router import Router
 from agents.interpreter import IntentInterpreter
 from platform.request_tracker import RequestCompletionObserver
 from agents.agent import Agent
+from events.id_generator import next_event_id
 from events.store import EventStore
 from events.types import Event
 from events.references import normalize_references
@@ -84,7 +83,7 @@ def _normalize_seed_event(seed: Any) -> Event:
         )
         try:
             ev = Event(
-                event_id=seed.get("event_id", str(uuid4())),
+                event_id=seed.get("event_id", next_event_id()),
                 type=seed["type"],
                 timestamp=seed.get("timestamp", datetime.now(UTC).isoformat()),
                 sender=seed["sender"],
