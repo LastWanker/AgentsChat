@@ -65,7 +65,7 @@ def build_demo():
 def main():
     loop, world, _, agents = build_demo()
     print("[main.py] 🚀 demo 要开跑啦，先预热一下。")
-    loop.run(max_ticks=30)
+    loop.run(max_ticks=8)
     print("[main.py] 🏁 循环结束，来看看大家都经历了什么。")
 
     # 跑完后，打印每个 Agent 看到的 event_id，验证闭环
