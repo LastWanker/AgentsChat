@@ -91,7 +91,12 @@
       display: grid;
       place-items: center;
       font-weight: 600;
-      font-size: 16px;
+      font-size: 12px;
+      line-height: 1.1;
+      padding: 4px;
+      text-align: center;
+      word-break: break-word;
+      white-space: normal;
       flex-shrink: 0;
     }
 
@@ -188,7 +193,7 @@
 
     function pickAvatar(name) {
       if (!name) return "?";
-      return name.trim().slice(0, 1).toUpperCase();
+      return name.trim();
     }
 
     function formatContent(event) {
@@ -199,21 +204,22 @@
       return JSON.stringify(content, null, 2);
     }
 
-    function formatReference(event) {
+    function formatReferences(event) {
       const refs = Array.isArray(event.references) ? event.references : [];
       if (refs.length === 0) {
-        return { id: "-", weight: "0" };
+        return [{ id: "-", weight: "0" }];
       }
-      const ref = refs[0] || {};
-      const weight = ref.weight || {};
-      const weightKeys = Object.keys(weight);
-      if (weightKeys.length === 0) {
-        return { id: ref.event_id || "-", weight: "0" };
-      }
-      const summary = weightKeys
-        .map((key) => `${key}:${weight[key]}`)
-        .join(" ");
-      return { id: ref.event_id || "-", weight: summary };
+            return refs.map((ref) => {
+        const weight = ref.weight || {};
+        const weightKeys = Object.keys(weight);
+        if (weightKeys.length === 0) {
+          return { id: ref.event_id || "-", weight: "0" };
+        }
+        const summary = weightKeys
+          .map((key) => `${key}:${weight[key]}`)
+          .join(" ");
+        return { id: ref.event_id || "-", weight: summary };
+      });
     }
 
     function isNotice(event) {
@@ -235,7 +241,14 @@
       }
       emptyState.style.display = "none";
 
-      events.forEach((event) => {
+      const latestDraftingIndex = events.reduce((latestIndex, event, index) => {
+        if (isNotice(event)) {
+          return latestIndex;
+        }
+        return event.completed === false ? index : latestIndex;
+      }, -1);
+
+      events.forEach((event, index) => {
         if (isNotice(event)) {
           const notice = document.createElement("div");
           notice.className = "notice";
@@ -247,13 +260,14 @@
         const row = document.createElement("div");
         row.className = "message-row";
         const sender = event.sender || "";
+        const senderName = event.sender_name || sender;
         if (sender === "you" || sender === "self") {
           row.classList.add("is-self");
         }
 
         const avatar = document.createElement("div");
         avatar.className = "avatar";
-        avatar.textContent = pickAvatar(sender || "?");
+        avatar.textContent = pickAvatar(senderName || "?");
 
         const stack = document.createElement("div");
         stack.className = "message-stack";
@@ -261,7 +275,8 @@
         const bubble = document.createElement("div");
         bubble.className = "bubble";
 
-        if (event.completed === false) {
+        const isDrafting = index === latestDraftingIndex;
+        if (isDrafting) {
           bubble.classList.add("drafting");
           bubble.dataset.drafting = "true";
           bubble.textContent = draftingTexts[draftingIndex % draftingTexts.length];
@@ -275,10 +290,14 @@
 
         const meta = document.createElement("div");
         meta.className = "meta";
-        const reference = formatReference(event);
-        meta.innerHTML = `<span>事件 ID: ${event.event_id || "-"}</span>` +
-          `<span>引用: ${reference.id}</span>` +
-          `<span>权重: ${reference.weight}</span>`;
+        const references = formatReferences(event);
+        const typeLabel = event.type || "-";
+        meta.innerHTML = `<div>事件 ID: ${event.event_id || "-"} 类型 ${typeLabel}</div>` +
+          references
+            .map((reference) => (
+              `<div>引用: ${reference.id} 权重: ${reference.weight}</div>`
+            ))
+            .join("");
 
         stack.appendChild(bubble);
         stack.appendChild(meta);
@@ -331,9 +350,11 @@
 
     function rotateDrafting() {
       draftingIndex += 1;
-      document.querySelectorAll("[data-drafting='true']").forEach((node) => {
-        node.textContent = draftingTexts[draftingIndex % draftingTexts.length];
-      });
+      const draftingNodes = document.querySelectorAll("[data-drafting='true']");
+      const latestNode = draftingNodes[draftingNodes.length - 1];
+      if (latestNode) {
+        latestNode.textContent = draftingTexts[draftingIndex % draftingTexts.length];
+      }
     }
 
     sessionSelect.addEventListener("change", () => {

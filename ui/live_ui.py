@@ -11,7 +11,7 @@ from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Deque, Dict, List
+from typing import Deque, Dict, List, Mapping
 from urllib.parse import parse_qs, urlparse
 
 
@@ -47,6 +47,27 @@ def _read_events(events_path: Path, limit: int) -> List[Dict]:
     return list(events)
 
 
+def _load_agent_names(session_dir: Path) -> Mapping[str, str]:
+    meta_path = session_dir / "meta.json"
+    if not meta_path.exists():
+        return {}
+    try:
+        with meta_path.open("r", encoding="utf-8") as handle:
+            meta = json.load(handle)
+    except json.JSONDecodeError:
+        return {}
+    agents = meta.get("agents") or []
+    names: Dict[str, str] = {}
+    for agent in agents:
+        if not isinstance(agent, dict):
+            continue
+        agent_id = agent.get("id")
+        name = agent.get("name")
+        if agent_id and name:
+            names[str(agent_id)] = str(name)
+    return names
+
+
 class LiveUIHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, directory: str, data_dir: Path, default_session: str | None, **kwargs):
         self.data_dir = data_dir
@@ -77,6 +98,15 @@ class LiveUIHandler(SimpleHTTPRequestHandler):
             if session_id:
                 events_path = self.data_dir / session_id / "events.jsonl"
             events = _read_events(events_path, limit) if events_path else []
+            if session_id:
+                agent_names = _load_agent_names(self.data_dir / session_id)
+                if agent_names:
+                    for event in events:
+                        if isinstance(event, dict):
+                            sender = event.get("sender")
+                            name = agent_names.get(str(sender))
+                            if name:
+                                event["sender_name"] = name
             self._send_json({"session_id": session_id, "events": events})
             return
 
@@ -121,13 +151,14 @@ def main():
     finally:
         server.server_close()
 
+
 def start_live_ui_server(
-    *,
-    data_dir: Path,
-    session_id: str | None,
-    host: str,
-    port: int,
-    auto_open: bool,
+        *,
+        data_dir: Path,
+        session_id: str | None,
+        host: str,
+        port: int,
+        auto_open: bool,
 ) -> ThreadingHTTPServer | None:
     directory = Path(__file__).resolve().parent
     handler = partial(
