@@ -3,15 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from config.roles import role_prompt_description
 from llm.schemas import schema_for_phase
-
-
-SYSTEM_ROLE_LIBRARY: Dict[str, str] = {
-    "boss": "你是 BOSS，负责控场、收口、做最终判断；你经常进行evaluation行为。",
-    "thinker": "你是产出者，负责讲出观点。",
-    "critic": "你是质疑者，负责挑刺儿。",
-    "default": "你是团队成员，请保持专业、简洁、可执行。",
-}
 
 
 def build_intention_prompt(
@@ -21,15 +14,16 @@ def build_intention_prompt(
     trigger_event: Dict[str, str],
     recent_events: List[Dict[str, str]] | None = None,
     referenced_events: List[Dict[str, str]] | None = None,
+    personal_tasks: Dict[str, Any] | None = None,
+    tag_pool: Dict[str, Any] | None = None,
+    team_board: List[Dict[str, Any]] | None = None,
     draft_intention: Dict[str, Any] | None = None,
-    candidate_references: List[Dict[str, Any]] | None = None,
     candidate_events: List[Dict[str, Any]] | None = None,
     phase: str = "draft",
 ) -> List[Dict[str, str]]:
     """构造两段式生成的提示词，默认 draft 阶段。"""
 
-    role_key = (agent_role or "default").lower()
-    role_desc = SYSTEM_ROLE_LIBRARY.get(role_key, SYSTEM_ROLE_LIBRARY["default"])
+    role_desc = role_prompt_description(agent_role)
     schema = schema_for_phase(phase)
     system = (
         "你在一个工作群聊中参与讨论。"
@@ -38,11 +32,9 @@ def build_intention_prompt(
         "draft 阶段的 draft_text 表示你打算对群里说/提交的草稿内容。"
         "finalize 阶段必须生成面向其他成员的最终成文内容，不要输出“我打算做什么”。"
         "draft 阶段必须提供意愿三维：confidence(了解程度)、motivation(兴趣/意愿)、urgency(自我信息重要性)，范围 0~1。"
-        "finalize 阶段必须为每条引用生成 weight：stance(-1..1, 反对到支持)、inspiration(0..1, 启发程度)、dependency(0..1, 依赖程度)。"
-        "引用必须覆盖所有对本次发言产生影响的事件（至少列出主要来源），每条引用的 weight 独立评估。"
-        "references 中只允许 event_id 与 weight 两个字段，不要附带原事件内容。"
-        "submit 类型必须显式给出 stance/inspiration/dependency，不可省略。"
-        "event type 的选择必须与 message_plan 与 draft_text 保持一致："
+        "draft 阶段需要输出 6~12 个 retrieval_tags，可适度补充 retrieval_keywords。"
+        "finalize 阶段 references 将由系统自动填充，weight 采用默认值。"
+        "event type 的选择必须与 draft_text 保持一致："
         "你打算说话就用 speak/speak_public，想提交结果就用 submit，想发起请求就用 request_*，想评价就用 evaluation。"
         "阶段为：{phase}。"
         "\n你的名字是：{agent_name}"
@@ -67,14 +59,18 @@ def build_intention_prompt(
         json.dumps(recent_events or [], ensure_ascii=False),
         "触发事件引用链（可参考）：",
         json.dumps(referenced_events or [], ensure_ascii=False),
+        "个人事务表（可参考）：",
+        json.dumps(personal_tasks or {}, ensure_ascii=False),
+        "tags 池（可参考）：",
+        json.dumps(tag_pool or {}, ensure_ascii=False),
+        "TeamBoard（可参考）：",
+        json.dumps(team_board or [], ensure_ascii=False),
     ]
     if phase == "finalize":
         user_lines.extend(
             [
                 "起草阶段输出（可参考）：",
                 json.dumps(draft_intention or {}, ensure_ascii=False),
-                "候选引用条目（可参考，包含 weight 字段）：",
-                json.dumps(candidate_references or [], ensure_ascii=False),
                 "候选事件完整内容（可参考）：",
                 json.dumps(candidate_events or [], ensure_ascii=False),
             ]

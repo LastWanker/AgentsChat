@@ -21,7 +21,7 @@ def ref_event_id(ref: Reference | str) -> str:
 
 def default_ref_weight() -> dict[str, float]:
     """Return a neutral reference weight."""
-    return {"stance": 0.0, "inspiration": 0.0, "dependency": 0.0}
+    return {"stance": 0.1, "inspiration": 0.1, "dependency": 0.1}
 
 
 def normalize_reference(ref: Reference | str) -> Reference:

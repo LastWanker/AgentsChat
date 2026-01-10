@@ -9,6 +9,8 @@ from events.intention_schemas import FinalIntention, IntentionDraft
 from events.types import Intention, Reference
 from events.reference_resolver import ReferenceResolver
 from events.references import default_ref_weight
+from events.tagging import generate_tags
+from config.roles import role_temperature
 from llm.client import LLMRequestOptions
 from llm.prompts import build_intention_prompt
 from llm.schemas import parse_intention_final
@@ -27,20 +29,18 @@ class IntentionFinalizer:
         *,
         config: Optional[FinalizerConfig] = None,
         llm_client: Optional[Any] = None,
+        memory: Optional[Any] = None,
     ):
         self.resolver = resolver
         self.config = config or FinalizerConfig()
         self.llm_client = llm_client
+        self.memory = memory
 
     def finalize(self, draft: IntentionDraft, *, agent_id: str, intention_id: str) -> Intention:
         """Convert a draft into a routed Intention using resolver-only references."""
-
-        if not draft.retrieval_plan:
-            raise ValueError("DraftIntention 缺少 retrieval_plan，无法生成可追溯引用。")
-
         print(
             f"[events/intention_finalizer.py] 🧭 进入两段式生成的第二段：为草稿 {intention_id} 解析引用。",
-            f"检索计划 {len(draft.retrieval_plan)} 条。",
+            f"索引 tags={len(draft.retrieval_tags)}。",
         )
         candidate_refs = self.resolver.resolve(draft)
 
@@ -50,14 +50,14 @@ class IntentionFinalizer:
 
         final = self._finalize_with_llm(draft, candidate_refs) if self._use_llm() else None
         if final is None:
-            weighted_refs = self._apply_weight_defaults(candidate_refs, draft)
+            weighted_refs = self._apply_weight_defaults(candidate_refs)
             final = FinalIntention(
                 kind=draft.kind,
                 payload=self._payload_for_kind(draft),
                 references=weighted_refs,
-                candidate_references=weighted_refs,
                 target_scope=draft.target_scope,
-                completed=True,
+                tags=self._default_tags(draft),
+                completed=self._completed_for_kind(draft.kind),
                 confidence=draft.confidence,
                 motivation=draft.motivation,
                 urgency=draft.urgency,
@@ -109,16 +109,21 @@ class IntentionFinalizer:
         }
         messages = build_intention_prompt(
             agent_name=str(draft.agent_id or "agent"),
-            agent_role=None,
+            agent_role=draft.agent_role,
             trigger_event=trigger_event,
             recent_events=[],
             referenced_events=[],
+            personal_tasks=self._personal_tasks_payload(draft.agent_id),
+            tag_pool=self._tag_pool_payload(),
+            team_board=self._team_board_payload(),
             draft_intention=draft.to_dict(),
-            candidate_references=candidate_refs,
             candidate_events=candidate_events,
             phase="finalize",
         )
-        options = LLMRequestOptions(stream=self.config.llm_mode == "stream")
+        options = LLMRequestOptions(
+            stream=self.config.llm_mode == "stream",
+            temperature=role_temperature(draft.agent_role),
+        )
 
         if self.config.llm_mode == "async":
             import asyncio
@@ -139,34 +144,42 @@ class IntentionFinalizer:
             return None
 
         final = FinalIntention.from_dict(data)
-        allowed_ids = {ref.get("event_id") for ref in candidate_refs}
-        filtered_refs = [
-            ref for ref in final.references if ref.get("event_id") in allowed_ids
-        ]
-        if not filtered_refs:
-            return None
-        final.references = self._ensure_weight_fields(filtered_refs, draft)
-        final.candidate_references = final.references
+        final.references = self._apply_weight_defaults(candidate_refs)
+        final.tags = final.tags or self._default_tags(draft)
+        final.completed = self._completed_for_kind(draft.kind)
         final.confidence = draft.confidence
         final.motivation = draft.motivation
         final.urgency = draft.urgency
         return final
 
-    def _apply_weight_defaults(
-            self, refs: List[Reference], draft: IntentionDraft
-    ) -> List[Reference]:
-        default_weight = self._weight_from_draft(draft)
-        return self._ensure_weight_fields(refs, draft, default_weight=default_weight)
+    def _personal_tasks_payload(self, agent_id: Optional[str]) -> Dict[str, Any]:
+        if not self.memory or not agent_id:
+            return {}
+        table = self.memory.personal_table_for(agent_id)
+        return {"done_list": table.done_list, "todo_list": table.todo_list}
+
+    def _tag_pool_payload(self) -> Dict[str, Any]:
+        if not self.memory:
+            return {}
+        return self.memory.tag_pool_payload()
+
+    def _team_board_payload(self) -> List[Dict[str, Any]]:
+        if not self.memory:
+            return []
+        return self.memory.team_board_payload()
+
+    def _apply_weight_defaults(self, refs: List[Reference]) -> List[Reference]:
+        default_weight = default_ref_weight()
+        return self._ensure_weight_fields(refs, default_weight=default_weight)
 
     def _ensure_weight_fields(
-            self,
-            refs: List[Reference],
-            draft: IntentionDraft,
-            *,
-            default_weight: Optional[Dict[str, float]] = None,
+        self,
+        refs: List[Reference],
+        *,
+        default_weight: Optional[Dict[str, float]] = None,
     ) -> List[Reference]:
         weighted: List[Reference] = []
-        fallback = default_weight or self._weight_from_draft(draft)
+        fallback = default_weight or default_ref_weight()
         for ref in refs:
             weight = dict(default_ref_weight())
             weight.update(ref.get("weight", {}) or {})
@@ -177,10 +190,20 @@ class IntentionFinalizer:
         return weighted
 
     @staticmethod
-    def _weight_from_draft(draft: IntentionDraft) -> Dict[str, float]:
-        stance = max(-1.0, min(1.0, (draft.motivation * 2.0) - 1.0))
-        return {
-            "stance": stance,
-            "inspiration": draft.confidence,
-            "dependency": draft.urgency,
-        }
+    def _completed_for_kind(kind: str) -> bool:
+        return (kind or "").lower() not in (
+            "request_anyone",
+            "request_specific",
+            "request_all",
+        )
+
+    @staticmethod
+    def _default_tags(draft: IntentionDraft) -> List[str]:
+        base_text = draft.draft_text or draft.message_plan
+        domain = (draft.agent_expertise or [])
+        fixed = [
+            str(draft.agent_name or draft.agent_id or "agent"),
+            str(domain[0] if domain else draft.agent_role or "general"),
+        ]
+
+        return generate_tags(text=base_text, fixed_prefix=fixed, max_tags=6)

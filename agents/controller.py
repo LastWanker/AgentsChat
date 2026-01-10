@@ -21,12 +21,14 @@ class AgentController:
             proposer: Optional[IntentionProposer] = None,
             store=None,  # EventStore，可选：用来给 proposer 喂 recent/ref
             query=None,  # EventQuery，可选
+            memory=None,
     ):
         self.agents = agents
         self._by_id = {a.id: a for a in agents}
 
         self.store = store
         self.query = query
+        self.memory = memory
 
         self.proposer = proposer or IntentionProposer(
             config=ProposerConfig(enable_llm=False)
@@ -118,6 +120,9 @@ class AgentController:
         # 可选：给 proposer 一点“最近事件”与“引用链”
         recent = []
         referenced = []
+        personal_tasks: Dict[str, Any] = {}
+        tag_pool: Dict[str, Any] = {}
+        team_board: List[Dict[str, Any]] = []
         if self.query is not None:
             try:
                 recent = [e.__dict__ if hasattr(e, "__dict__") else dict(e) for e in self.query.last_n(20)]
@@ -139,16 +144,45 @@ class AgentController:
                     f"[agents/controller.py] ⚠️ 读取引用事件失败，将忽略引用：{type(exc).__name__}:{exc}"
                 )
                 referenced = []
+        if self.memory is not None:
+            try:
+                table = self.memory.personal_table_for(agent.id)
+                personal_tasks = {
+                    "done_list": table.done_list,
+                    "todo_list": table.todo_list,
+                }
+            except Exception as exc:
+                print(
+                    f"[agents/controller.py] ⚠️ 读取个人事务表失败：{type(exc).__name__}:{exc}"
+                )
+            try:
+                tag_pool = self.memory.tag_pool_payload()
+            except Exception as exc:
+                print(
+                    f"[agents/controller.py] ⚠️ 读取 tags 池失败：{type(exc).__name__}:{exc}"
+                )
+            try:
+                team_board = self.memory.team_board_payload()
+            except Exception as exc:
+                print(
+                    f"[agents/controller.py] ⚠️ 读取 TeamBoard 失败：{type(exc).__name__}:{exc}"
+                )
 
         return ProposerContext(
             agent_id=agent.id,
             agent_name=getattr(agent, "name", agent.id),
             agent_role=getattr(agent, "role", None),
             scope=getattr(agent, "scope", "public"),
+            agent_expertise=getattr(agent, "expertise", []) or [],
             trigger_event=trigger_event,
             store=self.store,
+            memory=self.memory,
             recent_events=recent,
             referenced_events=referenced,
+            personal_tasks=personal_tasks,
+            tag_pool=tag_pool,
+            team_board=team_board,
+            agent_count=len(self.agents),
         )
 
     def _latest_store_event(self) -> Optional[Dict[str, Any]]:

@@ -11,36 +11,28 @@ INTENTION_DRAFT_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "required": [
         "kind",
-        "message_plan",
         "draft_text",
-        "retrieval_plan",
+        "retrieval_tags",
         "confidence",
         "motivation",
         "urgency",
     ],
     "properties": {
         "kind": {"type": "string", "description": "意向类型，如 speak/submit"},
-        "message_plan": {"type": "string", "description": "行动/回复计划"},
         "draft_text": {"type": "string", "description": "面向群内其他成员的草稿文本（我打算说/提交的内容）"},
+        "retrieval_tags": {
+            "type": "array",
+            "description": "用于索引的 tags（优先从 tags 池选取，建议 6~12 个）",
+            "items": {"type": "string"},
+        },
+        "retrieval_keywords": {
+            "type": "array",
+            "description": "不在 tags 池中的额外关键词，将进行全文检索",
+            "items": {"type": "string"},
+        },
         "confidence": {"type": "number", "description": "对主题了解程度(0~1)"},
         "motivation": {"type": "number", "description": "兴趣/回答意愿(0~1)"},
         "urgency": {"type": "number", "description": "重要性/紧迫性(0~1)"},
-        "retrieval_plan": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "keywords": {"type": "array", "items": {"type": "string"}},
-                    "event_types": {"type": "array", "items": {"type": "string"}},
-                    "scope": {"type": "string"},
-                    "after_event_id": {"type": "string"},
-                    "thread_depth": {"type": "integer"},
-                    "limit": {"type": "integer"},
-                },
-                "required": ["name"],
-            },
-        },
         "target_scope": {"type": "string"},
         "visibility": {"type": "string"},
     },
@@ -53,6 +45,11 @@ INTENTION_FINAL_SCHEMA: Dict[str, Any] = {
     "properties": {
         "kind": {"type": "string"},
         "payload": {"type": "object"},
+        "tags": {
+            "type": "array",
+            "description": "事件 tags（不超过 6 个，前两个固定为 agent 标签）",
+            "items": {"type": "string"},
+        },
         "references": {
             "type": "array",
             "items": {
@@ -72,7 +69,6 @@ INTENTION_FINAL_SCHEMA: Dict[str, Any] = {
                 },
             },
         },
-        "candidate_references": {"type": "array"},
         "completed": {"type": "boolean"},
     },
 }

@@ -1,4 +1,4 @@
-from events.intention_schemas import IntentionDraft, RetrievalInstruction
+from events.intention_schemas import IntentionDraft
 from events.query import EventQuery
 from events.reference_resolver import ReferenceResolver
 from events.store import EventStore
@@ -105,22 +105,11 @@ def test_reference_resolver_builds_candidates(tmp_path):
 
     draft = IntentionDraft(
         kind="speak",
-        message_plan="回应讨论",
-        retrieval_plan=[
-            RetrievalInstruction(
-                name="search-discussion",
-                keywords=["讨论"],
-                event_types=["speak"],
-                scope="public",
-                limit=1,
-            ),
-            RetrievalInstruction(
-                name="thread",
-                after_event_id="e4",
-                thread_depth=1,
-            ),
-        ],
+        draft_text="回应讨论",
+        retrieval_tags=[],
+        retrieval_keywords=["讨论"],
         target_scope="public",
+        agent_count=2,
     )
 
     references = resolver.resolve(draft)

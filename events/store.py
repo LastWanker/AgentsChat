@@ -110,6 +110,12 @@ class EventStore:
         )
         return True
 
+    def update_event(self, event: Event) -> None:
+        """Persist an updated event record."""
+        self._upsert_event(event)
+        print(
+            f"[events/store.py] 🛠️ 已更新事件 {event.event_id}。"
+        )
 
     def get(self, event_id: str) -> Optional[Event]:
         meta = self._index.get(event_id)

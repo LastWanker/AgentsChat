@@ -31,7 +31,7 @@ class EventQuery:
             *,
             scope: str,
             keywords: Sequence[str],
-            limit: int,
+            limit: Optional[int] = None,
             event_types: Optional[Sequence[str]] = None,
             after_time: Optional[str] = None,
     ) -> List[Event]:
@@ -54,7 +54,10 @@ class EventQuery:
             return any(needle in haystack for needle in needles)
 
         filtered = [ev for ev in self.store.all() if matches(ev)]
-        return self._sort_by_time(filtered)[:limit]
+        sorted_events = self._sort_by_time(filtered)
+        if limit is None:
+            return sorted_events
+        return sorted_events[:limit]
 
     def thread_up(self, event_id: str, depth: int) -> List[Event]:
         """Follow reference chains upwards for a limited depth."""

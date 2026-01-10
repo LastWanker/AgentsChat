@@ -1,5 +1,6 @@
 from events.intention_finalizer import IntentionFinalizer
 from events.intention_schemas import IntentionDraft
+from events.tagging import generate_tags
 
 
 class RuntimeLoop:
@@ -67,6 +68,7 @@ class RuntimeLoop:
                 payload={"text": f"{agent.name}对讨论兴趣缺缺，跳过了这次发言。"},
                 scope=draft.target_scope or agent.scope,
                 references=[],
+                tags=self._fallback_tags(agent, draft),
                 completed=True,
                 confidence=draft.confidence,
                 motivation=draft.motivation,
@@ -110,3 +112,13 @@ class RuntimeLoop:
                 break
         else:
             print("[runtime/loop.py] 🔚 达到最大轮次，先收一收。\n")
+
+    @staticmethod
+    def _fallback_tags(agent, draft: IntentionDraft) -> list[str]:
+        domain = getattr(agent, "expertise", []) or []
+        fixed = [
+            str(getattr(agent, "name", agent.id)),
+            str(domain[0] if domain else getattr(agent, "role", "general")),
+        ]
+        text = draft.draft_text or draft.message_plan
+        return generate_tags(text=text, fixed_prefix=fixed, max_tags=6)

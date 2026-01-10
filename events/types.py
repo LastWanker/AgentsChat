@@ -25,8 +25,8 @@ class Intention:
     kind: str  # speak / submit / ...
     payload: Dict[str, Any]  # draft content
     scope: Scope = "public"
-    candidate_references: List[Reference] = field(default_factory=list)
     references: List[Reference] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
     completed: bool = True
     confidence: float = 0.0
     motivation: float = 0.0
@@ -38,7 +38,6 @@ class Intention:
     def __post_init__(self):
         from events.references import normalize_references
 
-        self.candidate_references = normalize_references(self.candidate_references or [])
         self.references = normalize_references(self.references or [])
 
 @dataclass
@@ -50,6 +49,7 @@ class Event:
     scope: Scope
     content: Dict[str, Any]
     references: List[Reference] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
     recipients: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     completed: bool = True
@@ -63,6 +63,7 @@ class Decision:
 
 def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
               references: Optional[List[Reference | str]] = None,
+              tags: Optional[List[str]] = None,
               recipients: Optional[List[str]] = None,
               metadata: Optional[Dict[str, Any]] = None,
               completed: bool = True) -> Event:
@@ -76,6 +77,7 @@ def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
         scope=scope,
         content=content,
         references=normalize_references(references or []),
+        tags=list(tags or []),
         recipients=recipients or [],
         metadata=metadata or {},
         completed=completed,

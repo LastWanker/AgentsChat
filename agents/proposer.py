@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from events.intention_schemas import IntentionDraft, RetrievalInstruction
+from events.intention_schemas import IntentionDraft
 from llm.client import LLMRequestOptions
 from llm.prompts import build_intention_prompt
 from llm.schemas import parse_intention_draft
+from events.tagging import generate_tags
+from config.roles import role_temperature
 from uuid import uuid4
 
 
@@ -20,13 +23,18 @@ class ProposerContext:
     agent_name: str
     agent_role: Optional[str]
     scope: Optional[str]
-
     trigger_event: Dict[str, Any]
+    agent_expertise: List[str] = field(default_factory=list)
     store: Optional[Any] = None
+    memory: Optional[Any] = None
 
     # v0.31+ 可逐步填充
     recent_events: List[Dict[str, Any]] = field(default_factory=list)
     referenced_events: List[Dict[str, Any]] = field(default_factory=list)
+    personal_tasks: Dict[str, Any] = field(default_factory=dict)
+    tag_pool: Dict[str, Any] = field(default_factory=dict)
+    team_board: List[Dict[str, Any]] = field(default_factory=list)
+    agent_count: Optional[int] = None
 
 
 # ========= 给 Controller 的“软建议” =========
@@ -104,7 +112,8 @@ class IntentionProposer:
 
         intentions: List[IntentionDraft] = []
         hints = ProposerHints()
-        confidence, motivation, urgency = self._default_intent_scores(etype)
+        confidence, motivation, urgency = self._default_intent_scores(etype, context)
+        retrieval_tags, retrieval_keywords = self._build_retrieval_inputs(context)
 
         if etype in ("request_anyone", "request_specific", "request_all"):
             if self._should_submit_for_request(event_scope, etype, context):
@@ -113,16 +122,14 @@ class IntentionProposer:
                         intention_id=str(uuid4()),
                         agent_id=context.agent_id,
                         kind="submit",
-                        message_plan="提交对请求的响应并引用请求链路",
-                        retrieval_plan=[
-                            RetrievalInstruction(
-                                name="follow-request-thread",
-                                after_event_id=event_id,
-                                thread_depth=1,
-                                scope=event_scope,
-                            )
-                        ],
+                        draft_text="提交对请求的响应并引用请求链路",
+                        retrieval_tags=retrieval_tags,
+                        retrieval_keywords=retrieval_keywords,
                         target_scope=event_scope,
+                        agent_role=context.agent_role,
+                        agent_count=context.agent_count,
+                        agent_name=context.agent_name,
+                        agent_expertise=getattr(context, "agent_expertise", []) or [],
                         confidence=confidence,
                         motivation=motivation,
                         urgency=urgency,
@@ -136,13 +143,14 @@ class IntentionProposer:
                         intention_id=str(uuid4()),
                         agent_id=context.agent_id,
                         kind="speak",
-                        message_plan=self._simple_discussion_reply(payload.get("text")),
-                        retrieval_plan=[
-                            RetrievalInstruction(
-                                name="thread", after_event_id=event_id, thread_depth=1, scope=event_scope
-                            )
-                        ],
+                        draft_text=self._simple_discussion_reply(payload.get("text")),
+                        retrieval_tags=retrieval_tags,
+                        retrieval_keywords=retrieval_keywords,
                         target_scope=context.scope or event_scope,
+                        agent_role=context.agent_role,
+                        agent_count=context.agent_count,
+                        agent_name=context.agent_name,
+                        agent_expertise=getattr(context, "agent_expertise", []) or [],
                         confidence=confidence,
                         motivation=motivation,
                         urgency=urgency,
@@ -155,16 +163,14 @@ class IntentionProposer:
                     intention_id=str(uuid4()),
                     agent_id=context.agent_id,
                     kind="speak",
-                    message_plan="收到事件，暂时没有补充。",
-                    retrieval_plan=[
-                        RetrievalInstruction(
-                            name="fallback-thread",
-                            after_event_id=event_id,
-                            thread_depth=1,
-                            scope=event_scope,
-                        )
-                    ],
+                    draft_text="收到事件，暂时没有补充。",
+                    retrieval_tags=retrieval_tags,
+                    retrieval_keywords=retrieval_keywords,
                     target_scope=context.scope or event_scope,
+                    agent_role=context.agent_role,
+                    agent_count=context.agent_count,
+                    agent_name=context.agent_name,
+                    agent_expertise=getattr(context, "agent_expertise", []) or [],
                     confidence=confidence,
                     motivation=motivation,
                     urgency=urgency,
@@ -194,9 +200,15 @@ class IntentionProposer:
             trigger_event=context.trigger_event,
             recent_events=context.recent_events,
             referenced_events=context.referenced_events,
+            personal_tasks=context.personal_tasks,
+            tag_pool=context.tag_pool,
+            team_board=context.team_board,
             phase="draft",
         )
-        options = LLMRequestOptions(stream=self.config.llm_mode == "stream")
+        options = LLMRequestOptions(
+            stream=self.config.llm_mode == "stream",
+            temperature=role_temperature(context.agent_role),
+        )
 
         if self.config.llm_mode == "async":
             content = asyncio.run(self.llm_client.acomplete(messages, options=options))
@@ -214,15 +226,12 @@ class IntentionProposer:
             )
             return self._propose_with_rules(context)
 
-        if not draft.retrieval_plan:
-            draft.retrieval_plan = [
-                RetrievalInstruction(
-                    name="fallback-thread",
-                    after_event_id=context.trigger_event.get("event_id"),
-                    thread_depth=1,
-                    scope=context.trigger_event.get("scope") or context.scope,
-                )
-            ]
+        if not draft.retrieval_tags:
+            draft.retrieval_tags, draft.retrieval_keywords = self._build_retrieval_inputs(context)
+        draft.agent_role = context.agent_role
+        draft.agent_count = context.agent_count
+        draft.agent_name = context.agent_name
+        draft.agent_expertise = getattr(context, "agent_expertise", []) or []
         return [draft], ProposerHints()
 
     # ---------- 公共校验 / 裁剪 ----------
@@ -243,12 +252,33 @@ class IntentionProposer:
             return f"收到发言，基于实时时间冷却后给出讨论：{text}"
         return "收到发言，基于实时时间冷却后给出讨论意见。"
 
-    def _default_intent_scores(self, etype: Optional[str]) -> Tuple[float, float, float]:
+    def _default_intent_scores(
+            self, etype: Optional[str], context: ProposerContext
+    ) -> Tuple[float, float, float]:
+        todo_count = len(context.personal_tasks.get("todo_list", []))
+        todo_bias = min(0.3, todo_count * 0.05)
         if etype in ("request_anyone", "request_specific", "request_all"):
-            return 0.5, 0.8, 0.8
+            return 0.5, 0.8 + todo_bias, 0.8 + todo_bias
         if etype in ("speak", "speak_public"):
-            return 0.6, 0.4, 0.3
-        return 0.4, 0.4, 0.2
+            return 0.6, 0.4 + todo_bias, 0.3 + todo_bias
+        return 0.4, 0.4 + todo_bias, 0.2 + todo_bias
+
+    def _build_retrieval_inputs(
+        self, context: ProposerContext
+    ) -> Tuple[List[str], List[str]]:
+        tag_candidates = list((context.tag_pool or {}).get("tags", []))
+        text_blob = json.dumps(
+            {
+                "personal_tasks": context.personal_tasks,
+                "team_board": context.team_board,
+                "recent_events": context.recent_events,
+            },
+            ensure_ascii=False,
+        )
+        tags = generate_tags(text=text_blob, fixed_prefix=tag_candidates[:2], max_tags=12)
+        keywords = [t for t in tags if t not in tag_candidates][:3]
+        tags = [t for t in tags if t in tag_candidates or len(tag_candidates) < 6][:12]
+        return tags, keywords
 
     def _should_submit_for_request(
             self, event_scope: str, etype: str, context: ProposerContext

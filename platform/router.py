@@ -154,5 +154,6 @@ class Router:
             scope=intention.scope,
             content=intention.payload,
             references=intention.references,
+            tags=intention.tags,
             completed=intention.completed,
         )

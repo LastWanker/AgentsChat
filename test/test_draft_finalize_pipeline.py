@@ -1,5 +1,5 @@
 from events.intention_finalizer import IntentionFinalizer
-from events.intention_schemas import IntentionDraft, RetrievalInstruction
+from events.intention_schemas import IntentionDraft
 from events.query import EventQuery
 from events.reference_resolver import ReferenceResolver
 from events.store import EventStore
@@ -17,21 +17,6 @@ def _make_event(event_id: str, scope: str, text: str) -> Event:
     )
 
 
-def test_draft_needs_retrieval_plan(tmp_path):
-    query = EventQuery(EventStore(base_dir=tmp_path, session_id="s", metadata={}))
-    resolver = ReferenceResolver(query)
-    finalizer = IntentionFinalizer(resolver)
-
-    draft = IntentionDraft(kind="speak", message_plan="hi", retrieval_plan=[])
-    draft.intention_id = "d1"
-
-    try:
-        finalizer.finalize(draft, agent_id="agent", intention_id="d1")
-        assert False, "expected ValueError"
-    except ValueError as exc:  # noqa: PT011
-        assert "retrieval_plan" in str(exc)
-
-
 def test_finalizer_only_uses_resolver_results(tmp_path):
     store = EventStore(base_dir=tmp_path, session_id="sess", metadata={})
     store.append(_make_event("e-found", "public", "需要引用的讨论"))
@@ -45,16 +30,14 @@ def test_finalizer_only_uses_resolver_results(tmp_path):
         intention_id="draft-1",
         agent_id="agent-1",
         kind="speak",
-        message_plan="带上 resolver 找到的引用回复",
-        retrieval_plan=[
-            RetrievalInstruction(name="search", keywords=["讨论"], event_types=["speak"], scope="public", limit=2)
-        ],
+        draft_text="带上 resolver 找到的引用回复",
+        retrieval_tags=[],
+        retrieval_keywords=["讨论"],
         target_scope="public",
+        agent_count=1,
     )
 
     final_intention = finalizer.finalize(draft, agent_id="agent-1", intention_id="final-1")
 
-    assert final_intention.payload["text"] == draft.message_plan
+    assert final_intention.payload["text"] == draft.draft_text
     assert {ref["event_id"] for ref in final_intention.references} == {"e-found"}
-    # references 必须与 resolver 返回一致，不允许额外杜撰
-    assert {ref["event_id"] for ref in final_intention.candidate_references} == {"e-found"}

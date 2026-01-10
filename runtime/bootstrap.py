@@ -23,6 +23,8 @@ from events.intention_finalizer import IntentionFinalizer, FinalizerConfig
 from events.query import EventQuery
 from events.reference_resolver import ReferenceResolver
 from agents.proposer import IntentionProposer, ProposerConfig
+from events.session_memory import SessionMemory
+from runtime.maintenance import SessionMaintenanceObserver
 
 
 @dataclass
@@ -130,6 +132,7 @@ def _normalize_seed_event(seed: Any) -> Event:
                 scope=seed.get("scope", "public"),
                 content=seed.get("content", {}),
                 references=normalize_references(seed.get("references", [])),
+                tags=seed.get("tags", []),
                 recipients=seed.get("recipients", []),
                 metadata=seed.get("metadata", {}),
                 completed=seed.get("completed", True),
@@ -179,6 +182,12 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     )
     _enable_terminal_logging(store.session_dir)
     query = EventQuery(store)
+    memory = SessionMemory(
+        base_dir=store.session_dir,
+        agents=cfg.agents,
+        llm_client=cfg.llm_client,
+        llm_mode=cfg.llm_mode,
+    )
     print(
         f"[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery，session={store.session_id}。"
     )
@@ -223,12 +232,14 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         proposer=proposer,
         store=store,
         query=query,
+        memory=memory,
     )
-    resolver = ReferenceResolver(query)
+    resolver = ReferenceResolver(query, tag_pool=memory.tag_pool)
     finalizer = IntentionFinalizer(
         resolver,
         config=FinalizerConfig(enable_llm=cfg.enable_llm, llm_mode=cfg.llm_mode),
         llm_client=cfg.llm_client,
+        memory=memory,
     )
     loop = RuntimeLoop(
         controller=controller,
@@ -251,6 +262,8 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         RequestCompletionObserver(store=store, world=world, agents=cfg.agents)
     )
     print("[runtime/bootstrap.py] ✅ RequestCompletionObserver 启用，负责宣告请求完成。")
+    world.add_observer(SessionMaintenanceObserver(memory=memory, store=store))
+    print("[runtime/bootstrap.py] 🧹 SessionMaintenanceObserver 启用，负责事后维护。")
 
     # === 注入 seed events（Boss 或测试用）===
     if cfg.seed_events:

@@ -17,7 +17,6 @@ Intention = {
     "payload": dict,  # 尚未校验、尚未补全的内容，例如 text / result / score
 
     # —— 引用信息 ——
-    "candidate_references": list,  # 候选引用，尚未裁决
     "references": list,  # 最终引用（全局事件图骨架）
     # 例如 text / result / score / references（候选）
 
