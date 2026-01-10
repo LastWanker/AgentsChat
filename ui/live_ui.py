@@ -114,6 +114,12 @@ class LiveUIHandler(SimpleHTTPRequestHandler):
             self.path = "/live_ui.html"
         return super().do_GET()
 
+    def log_message(self, format: str, *args) -> None:  # noqa: A002 - keep handler signature
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/events":
+            return
+        super().log_message(format, *args)
+
 
 def main():
     parser = argparse.ArgumentParser(description="AgentsChat live UI server")

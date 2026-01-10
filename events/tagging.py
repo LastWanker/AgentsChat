@@ -113,6 +113,49 @@ def generate_tags_with_llm(
     except Exception:
         return None
     raw_tags = data.get("tags") if isinstance(data, dict) else None
+    return _normalize_llm_tags(raw_tags, fixed_prefix, max_tags)
+
+
+async def generate_tags_with_llm_async(
+    *,
+    text: str,
+    fixed_prefix: Sequence[str] | None = None,
+    max_tags: int = 6,
+    llm_client: Optional[Any] = None,
+    tag_pool: Optional[Dict[str, Any]] = None,
+    semaphore: Optional[Any] = None,
+) -> Optional[List[str]]:
+    if llm_client is None:
+        return None
+    from llm.client import LLMRequestOptions
+    from llm.prompts import build_tag_generation_prompt
+    from llm.schemas import parse_tag_generation
+
+    messages = build_tag_generation_prompt(
+        text=text,
+        max_tags=max_tags,
+        fixed_prefix=list(fixed_prefix or []),
+        tag_pool=tag_pool,
+    )
+    options = LLMRequestOptions(temperature=0.2, max_tokens=96)
+    if semaphore is None:
+        content = await llm_client.acomplete(messages, options=options)
+    else:
+        async with semaphore:
+            content = await llm_client.acomplete(messages, options=options)
+    try:
+        data = parse_tag_generation(content)
+    except Exception:
+        return None
+    raw_tags = data.get("tags") if isinstance(data, dict) else None
+    return _normalize_llm_tags(raw_tags, fixed_prefix, max_tags)
+
+
+def _normalize_llm_tags(
+    raw_tags: Optional[Sequence[Any]],
+    fixed_prefix: Sequence[str] | None,
+    max_tags: int,
+) -> Optional[List[str]]:
     if not raw_tags:
         return None
     fixed = [str(t) for t in (fixed_prefix or []) if t]

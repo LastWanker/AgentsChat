@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from events.references import default_ref_weight, normalize_references
-from events.tagging import extend_tags, generate_tags, generate_tags_with_llm
+from events.tagging import (
+    extend_tags,
+    generate_tags,
+    generate_tags_with_llm,
+    generate_tags_with_llm_async,
+)
 from events.types import Event
 from llm.client import LLMRequestOptions
 
@@ -170,6 +178,9 @@ class SessionMemory:
         agents: List[Any],
         llm_client: Optional[Any] = None,
         llm_mode: str = "sync",
+        maintenance_enabled: bool = True,
+        maintenance_workers: int = 2,
+        maintenance_llm_concurrency: int = 3,
     ) -> None:
         self.base_dir = base_dir
         self.tasks_dir = base_dir / "personal_tasks"
@@ -178,6 +189,16 @@ class SessionMemory:
         self.llm_client = llm_client
         self.llm_mode = llm_mode
         self._agents = {getattr(agent, "id"): agent for agent in agents}
+        self._maintenance_enabled = maintenance_enabled
+        self._maintenance_workers = max(1, maintenance_workers)
+        self._maintenance_llm_concurrency = max(1, maintenance_llm_concurrency)
+        self._maintenance_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._maintenance_queue: Optional[asyncio.Queue] = None
+        self._maintenance_thread: Optional[threading.Thread] = None
+        self._llm_semaphore: Optional[asyncio.Semaphore] = None
+        self._tag_pool_seeded = False
+        if self._maintenance_enabled:
+            self._start_maintenance_loop()
 
     def personal_table_for(self, agent_id: str) -> PersonalTaskTable:
         return PersonalTaskTable.load(agent_id, self.tasks_dir)
@@ -188,11 +209,85 @@ class SessionMemory:
     def team_board_payload(self) -> List[Dict[str, Any]]:
         return list(self.team_board.entries)
 
-    def handle_event(self, event: Event, store: Any) -> None:
-        self._update_personal_tasks(event)
+    def _start_maintenance_loop(self) -> None:
+        if self._maintenance_loop is not None:
+            return
+        ready = threading.Event()
+
+        def _runner() -> None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self._maintenance_loop = loop
+            self._maintenance_queue = asyncio.Queue()
+            self._llm_semaphore = asyncio.Semaphore(self._maintenance_llm_concurrency)
+            for _ in range(self._maintenance_workers):
+                loop.create_task(self._maintenance_worker())
+            ready.set()
+            loop.run_forever()
+
+        self._maintenance_thread = threading.Thread(target=_runner, daemon=True)
+        self._maintenance_thread.start()
+        ready.wait(timeout=1)
+
+    def _enqueue_maintenance(self, event: Event, store: Any) -> None:
+        if not self._maintenance_loop or not self._maintenance_queue:
+            self._run_maintenance_sync(event, store)
+            return
+        try:
+            self._maintenance_loop.call_soon_threadsafe(
+                self._maintenance_queue.put_nowait, (event, store)
+            )
+        except RuntimeError:
+            self._run_maintenance_sync(event, store)
+
+    async def _maintenance_worker(self) -> None:
+        if not self._maintenance_queue:
+            return
+        while True:
+            event, store = await self._maintenance_queue.get()
+            try:
+                await self._run_maintenance_tasks(event, store)
+            except Exception as exc:  # noqa: BLE001 - ensure background loop lives
+                print(f"[events/session_memory.py] ⚠️ 维护任务失败: {type(exc).__name__}: {exc}")
+            finally:
+                self._maintenance_queue.task_done()
+
+    async def _run_maintenance_tasks(self, event: Event, store: Any) -> None:
+        await asyncio.gather(
+            self._update_tags_async(event, store),
+            self._update_team_board_async(event, store),
+            self._score_reference_weights_async(event, store),
+        )
+
+    def _run_maintenance_sync(self, event: Event, store: Any) -> None:
         self._update_tags(event, store)
         self._update_team_board(event, store)
         self._score_reference_weights(event, store)
+
+    @asynccontextmanager
+    async def _llm_guard(self) -> Any:
+        if self._llm_semaphore is None:
+            yield
+            return
+        async with self._llm_semaphore:
+            yield
+
+    async def _complete_async(
+        self, messages: List[Dict[str, str]], options: LLMRequestOptions
+    ) -> str:
+        if self.llm_client is None:
+            return ""
+        if self.llm_mode == "async":
+            async with self._llm_guard():
+                return await self.llm_client.acomplete(messages, options=options)
+        return await asyncio.to_thread(self._complete, messages, options)
+
+    def handle_event(self, event: Event, store: Any) -> None:
+        self._update_personal_tasks(event)
+        if self._maintenance_enabled:
+            self._enqueue_maintenance(event, store)
+        else:
+            self._run_maintenance_sync(event, store)
 
     def _update_personal_tasks(self, event: Event) -> None:
         for agent_id in self._agents.keys():
@@ -234,7 +329,8 @@ class SessionMemory:
             )
             updated = True
 
-        if not self.tag_pool.mapping:
+        if not self.tag_pool.mapping and not self._tag_pool_seeded:
+            self._tag_pool_seeded = True
             extra = generate_tags_with_llm(
                 text=content_text,
                 fixed_prefix=event.tags,
@@ -243,6 +339,82 @@ class SessionMemory:
                 llm_mode=self.llm_mode,
                 tag_pool=tag_pool_payload,
             )
+            if not extra:
+                extra = generate_tags(
+                    text=content_text,
+                    fixed_prefix=event.tags,
+                    max_tags=9,
+                )
+            event.tags = extend_tags(event.tags, extra, max_tags=9)
+            updated = True
+
+        if updated:
+            store.update_event(event)
+        self.tag_pool.update_from_event(event)
+        self.tag_pool.save()
+
+    async def _update_tags_async(self, event: Event, store: Any) -> None:
+        content_text = _stringify_event_content(event)
+        base_prefix = [str(event.sender), "general"]
+        tag_pool_payload = self.tag_pool_payload()
+        updated = False
+
+        llm_tags = None
+        if self.llm_client is not None:
+            if self.llm_mode == "async":
+                llm_tags = await generate_tags_with_llm_async(
+                    text=content_text,
+                    fixed_prefix=base_prefix,
+                    max_tags=6,
+                    llm_client=self.llm_client,
+                    tag_pool=tag_pool_payload,
+                    semaphore=self._llm_semaphore,
+                )
+            else:
+                llm_tags = await asyncio.to_thread(
+                    generate_tags_with_llm,
+                    text=content_text,
+                    fixed_prefix=base_prefix,
+                    max_tags=6,
+                    llm_client=self.llm_client,
+                    llm_mode=self.llm_mode,
+                    tag_pool=tag_pool_payload,
+                )
+        if llm_tags:
+            if llm_tags != event.tags:
+                event.tags = llm_tags
+                updated = True
+        elif not event.tags:
+            event.tags = generate_tags(
+                text=content_text,
+                fixed_prefix=base_prefix,
+                max_tags=6,
+            )
+            updated = True
+
+        if not self.tag_pool.mapping and not self._tag_pool_seeded:
+            self._tag_pool_seeded = True
+            extra = None
+            if self.llm_client is not None:
+                if self.llm_mode == "async":
+                    extra = await generate_tags_with_llm_async(
+                        text=content_text,
+                        fixed_prefix=event.tags,
+                        max_tags=9,
+                        llm_client=self.llm_client,
+                        tag_pool=tag_pool_payload,
+                        semaphore=self._llm_semaphore,
+                    )
+                else:
+                    extra = await asyncio.to_thread(
+                        generate_tags_with_llm,
+                        text=content_text,
+                        fixed_prefix=event.tags,
+                        max_tags=9,
+                        llm_client=self.llm_client,
+                        llm_mode=self.llm_mode,
+                        tag_pool=tag_pool_payload,
+                    )
             if not extra:
                 extra = generate_tags(
                     text=content_text,
@@ -271,6 +443,22 @@ class SessionMemory:
             self.team_board.window_events = self.team_board.window_events[6:]
         self.team_board.save()
 
+    async def _update_team_board_async(self, event: Event, store: Any) -> None:
+        self.team_board.window_events.append(event.event_id)
+        summary = await self._summarize_event_async(event)
+        if self._is_boss_event(event):
+            self.team_board.update(event, summary, kind="boss")
+        if len(self.team_board.window_events) >= 6:
+            window_ids = list(self.team_board.window_events[:6])
+            window_summary = await self._summarize_window_async(window_ids, store)
+            if not window_summary:
+                window_summary = f"最近 6 条事件总结：{summary}"
+            self.team_board.entries.append(
+                {"kind": "window", "summary": window_summary, "event_ids": window_ids}
+            )
+            self.team_board.window_events = self.team_board.window_events[6:]
+        self.team_board.save()
+
     def _score_reference_weights(self, event: Event, store: Any) -> None:
         if not event.references:
             return
@@ -278,9 +466,27 @@ class SessionMemory:
             return
         refs = normalize_references(event.references)
         if self.llm_mode == "async":
-            updated, refs = self._score_reference_weights_async(event, refs, store)
+            updated, refs = self._run_coroutine_sync(
+                self._score_reference_weights_async_for_refs(event, refs, store)
+            )
         else:
             updated, refs = self._score_reference_weights_sync(event, refs, store)
+        if updated:
+            event.references = normalize_references(refs)
+            store.update_event(event)
+
+    async def _score_reference_weights_async(self, event: Event, store: Any) -> None:
+        if not event.references:
+            return
+        if self.llm_client is None:
+            return
+        refs = normalize_references(event.references)
+        if self.llm_mode == "async":
+            updated, refs = await self._score_reference_weights_async_for_refs(event, refs, store)
+        else:
+            updated, refs = await asyncio.to_thread(
+                self._score_reference_weights_sync, event, refs, store
+            )
         if updated:
             event.references = normalize_references(refs)
             store.update_event(event)
@@ -307,7 +513,7 @@ class SessionMemory:
             new_refs.append(ref)
         return updated, new_refs
 
-    def _score_reference_weights_async(
+    async def _score_reference_weights_async_for_refs(
         self, event: Event, refs: List[Dict[str, Any]], store: Any
     ) -> tuple[bool, List[Dict[str, Any]]]:
         tasks = []
@@ -322,7 +528,7 @@ class SessionMemory:
                 meta.append((idx, dim))
         if not tasks:
             return False, refs
-        results = self._run_coroutine_sync(self._gather_scores(tasks))
+        results = await self._gather_scores(tasks)
         updated = False
         for (idx, dim), score in zip(meta, results):
             if score is None:
@@ -383,7 +589,8 @@ class SessionMemory:
         prompt = self._score_prompt(event, ref_event, dimension, rubric, relation_hint)
         options = LLMRequestOptions(temperature=0.0, max_tokens=8)
         messages = [{"role": "system", "content": "你是严谨的评分器。"}, {"role": "user", "content": prompt}]
-        content = await self.llm_client.acomplete(messages, options=options)
+        async with self._llm_guard():
+            content = await self.llm_client.acomplete(messages, options=options)
         return _parse_score(content)
 
     def _score_prompt(
@@ -449,6 +656,17 @@ class SessionMemory:
                     return str(content[key])
         return json.dumps(content, ensure_ascii=False)
 
+    async def _summarize_event_async(self, event: Event) -> str:
+        llm_summary = await self._summarize_event_with_llm_async(event)
+        if llm_summary:
+            return llm_summary
+        content = event.content or {}
+        if isinstance(content, dict):
+            for key in ("text", "result", "request", "score"):
+                if key in content and content[key]:
+                    return str(content[key])
+        return json.dumps(content, ensure_ascii=False)
+
     def _summarize_event_with_llm(self, event: Event) -> Optional[str]:
         if self.llm_client is None:
             return None
@@ -464,6 +682,25 @@ class SessionMemory:
             {"role": "user", "content": prompt},
         ]
         summary = self._complete(messages, options).strip()
+        if not summary:
+            return None
+        return self._compact_summary(summary)
+
+    async def _summarize_event_with_llm_async(self, event: Event) -> Optional[str]:
+        if self.llm_client is None:
+            return None
+        prompt = (
+            "请用不超过40字总结事件的核心信息，输出一句话。\n"
+            f"事件类型：{event.type}\n"
+            f"发送者：{event.sender}\n"
+            f"内容：{json.dumps(event.content, ensure_ascii=False)}"
+        )
+        options = LLMRequestOptions(temperature=0.2, max_tokens=64)
+        messages = [
+            {"role": "system", "content": "你是事件摘要器。"},
+            {"role": "user", "content": prompt},
+        ]
+        summary = (await self._complete_async(messages, options)).strip()
         if not summary:
             return None
         return self._compact_summary(summary)
@@ -496,6 +733,38 @@ class SessionMemory:
             {"role": "user", "content": prompt},
         ]
         summary = self._complete(messages, options).strip()
+        if not summary:
+            return None
+        return f"最近 6 条事件总结：{self._compact_summary(summary)}"
+
+    async def _summarize_window_async(self, event_ids: List[str], store: Any) -> Optional[str]:
+        if self.llm_client is None:
+            return None
+        events = [store.get(event_id) for event_id in event_ids]
+        payloads = []
+        for ev in events:
+            if not ev:
+                continue
+            payloads.append(
+                {
+                    "event_id": getattr(ev, "event_id", ""),
+                    "type": getattr(ev, "type", ""),
+                    "sender": getattr(ev, "sender", ""),
+                    "content": getattr(ev, "content", {}),
+                }
+            )
+        if not payloads:
+            return None
+        prompt = (
+            "请归纳最近事件的整体进展，不超过60字，输出一句话。\n"
+            f"事件列表：{json.dumps(payloads, ensure_ascii=False)}"
+        )
+        options = LLMRequestOptions(temperature=0.2, max_tokens=80)
+        messages = [
+            {"role": "system", "content": "你是团队进展摘要器。"},
+            {"role": "user", "content": prompt},
+        ]
+        summary = (await self._complete_async(messages, options)).strip()
         if not summary:
             return None
         return f"最近 6 条事件总结：{self._compact_summary(summary)}"
