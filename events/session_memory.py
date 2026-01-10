@@ -310,8 +310,6 @@ class SessionMemory:
     def _score_reference_weights_async(
         self, event: Event, refs: List[Dict[str, Any]], store: Any
     ) -> tuple[bool, List[Dict[str, Any]]]:
-        import asyncio
-
         tasks = []
         meta: List[tuple[int, str]] = []
         for idx, ref in enumerate(refs):
@@ -324,7 +322,7 @@ class SessionMemory:
                 meta.append((idx, dim))
         if not tasks:
             return False, refs
-        results = asyncio.run(self._gather_scores(tasks))
+        results = self._run_coroutine_sync(self._gather_scores(tasks))
         updated = False
         for (idx, dim), score in zip(meta, results):
             if score is None:
@@ -339,6 +337,30 @@ class SessionMemory:
         import asyncio
 
         return await asyncio.gather(*tasks)
+
+    def _run_coroutine_sync(self, coro: Any) -> Any:
+        import asyncio
+        import threading
+
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        result: dict[str, Any] = {}
+        error: dict[str, BaseException] = {}
+
+        def _runner() -> None:
+            try:
+                result["value"] = asyncio.run(coro)
+            except BaseException as exc:
+                error["value"] = exc
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join()
+        if "value" in error:
+            raise error["value"]
+        return result.get("value")
 
     def _score_dimension(self, event: Event, ref_event: Event, dimension: str) -> Optional[float]:
         rubric = _SCORE_RUBRICS.get(dimension)
@@ -386,9 +408,7 @@ class SessionMemory:
         if self.llm_client is None:
             return ""
         if self.llm_mode == "async":
-            import asyncio
-
-            return asyncio.run(self.llm_client.acomplete(messages, options=options))
+            return self._run_coroutine_sync(self.llm_client.acomplete(messages, options=options))
         if self.llm_mode == "stream":
             return "".join(self.llm_client.stream(messages, options=options))
         return self.llm_client.complete(messages, options=options)
