@@ -112,6 +112,13 @@ class RuntimeLoop:
                 break
         else:
             print("[runtime/loop.py] 🔚 达到最大轮次，先收一收。\n")
+        if getattr(self.controller, "memory", None):
+            print("[runtime/loop.py] 🧹 等待后台维护任务全部完成…")
+            drained = self.controller.memory.wait_for_maintenance()
+            if drained:
+                print("[runtime/loop.py] ✅ 后台维护任务已清空。")
+            else:
+                print("[runtime/loop.py] ⚠️ 后台维护任务未能完全清空。")
 
     @staticmethod
     def _fallback_tags(agent, draft: IntentionDraft) -> list[str]:
