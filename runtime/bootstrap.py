@@ -69,6 +69,7 @@ class AppRuntime:
     router: Router
     controller: AgentController
     loop: RuntimeLoop
+    ui_server: Any | None = None
 
 
 class _TeeStream:
@@ -191,10 +192,11 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     print(
         f"[runtime/bootstrap.py] 🧱 正在搭建世界底座，初始化 EventStore 与 EventQuery，session={store.session_id}。"
     )
+    ui_server = None
     if cfg.ui_enabled:
         from ui.live_ui import start_live_ui_server
 
-        start_live_ui_server(
+        ui_server = start_live_ui_server(
             data_dir=store.base_dir,
             session_id=store.session_id,
             host=cfg.ui_host,
@@ -285,4 +287,5 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
         router=router,
         controller=controller,
         loop=loop,
+        ui_server=ui_server,
     )

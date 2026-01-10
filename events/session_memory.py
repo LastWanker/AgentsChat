@@ -200,6 +200,10 @@ class SessionMemory:
         self._maintenance_thread: Optional[threading.Thread] = None
         self._llm_semaphore: Optional[asyncio.Semaphore] = None
         self._tag_pool_seeded = False
+        self._maintenance_stopping = False
+        self._personal_task_locks: Dict[str, threading.Lock] = {}
+        self._tag_pool_lock = threading.Lock()
+        self._team_board_lock = threading.Lock()
         if self._maintenance_enabled:
             self._start_maintenance_loop()
 
@@ -234,6 +238,9 @@ class SessionMemory:
         ready.wait(timeout=1)
 
     def _enqueue_maintenance(self, event: Event, store: Any) -> None:
+        if self._maintenance_stopping:
+            self._run_maintenance_sync(event, store)
+            return
         if not self._maintenance_loop or not self._maintenance_queue:
             self._run_maintenance_sync(event, store)
             return
@@ -248,7 +255,11 @@ class SessionMemory:
         if not self._maintenance_queue:
             return
         while True:
-            event, store = await self._maintenance_queue.get()
+            item = await self._maintenance_queue.get()
+            if item is None:
+                self._maintenance_queue.task_done()
+                break
+            event, store = item
             try:
                 await self._run_maintenance_tasks(event, store)
             except Exception as exc:  # noqa: BLE001 - ensure background loop lives
@@ -258,12 +269,14 @@ class SessionMemory:
 
     async def _run_maintenance_tasks(self, event: Event, store: Any) -> None:
         await asyncio.gather(
+            self._update_personal_tasks_async(event),
             self._update_tags_async(event, store),
             self._update_team_board_async(event, store),
             self._score_reference_weights_async(event, store),
         )
 
     def _run_maintenance_sync(self, event: Event, store: Any) -> None:
+        self._update_personal_tasks(event)
         self._update_tags(event, store)
         self._update_team_board(event, store)
         self._score_reference_weights(event, store)
@@ -300,14 +313,52 @@ class SessionMemory:
         return await asyncio.to_thread(self._complete, messages, options)
 
     def handle_event(self, event: Event, store: Any) -> None:
-        self._update_personal_tasks(event)
         if self._maintenance_enabled:
             self._enqueue_maintenance(event, store)
         else:
             self._run_maintenance_sync(event, store)
 
+    def shutdown(self, timeout: Optional[float] = None) -> bool:
+        if not self._maintenance_loop or not self._maintenance_queue:
+            return True
+        self._maintenance_stopping = True
+        drained = self.wait_for_maintenance(timeout=timeout)
+        try:
+            for _ in range(self._maintenance_workers):
+                self._maintenance_loop.call_soon_threadsafe(
+                    self._maintenance_queue.put_nowait, None
+                )
+        except RuntimeError:
+            drained = False
+        drained = self.wait_for_maintenance(timeout=timeout) and drained
+        try:
+            self._maintenance_loop.call_soon_threadsafe(self._maintenance_loop.stop)
+        except RuntimeError:
+            drained = False
+        if self._maintenance_thread:
+            self._maintenance_thread.join(timeout=timeout)
+        return drained
+
     def _update_personal_tasks(self, event: Event) -> None:
         for agent_id in self._agents.keys():
+            self._update_personal_tasks_for_agent(event, agent_id)
+
+    async def _update_personal_tasks_async(self, event: Event) -> None:
+        if not self._agents:
+            return
+        tasks = [
+            asyncio.to_thread(self._update_personal_tasks_for_agent, event, agent_id)
+            for agent_id in self._agents.keys()
+        ]
+        if tasks:
+            await asyncio.gather(*tasks)
+
+    def _update_personal_tasks_for_agent(self, event: Event, agent_id: str) -> None:
+        lock = self._personal_task_locks.get(agent_id)
+        if lock is None:
+            lock = threading.Lock()
+            self._personal_task_locks[agent_id] = lock
+        with lock:
             table = self.personal_table_for(agent_id)
             if event.sender != agent_id:
                 if event.type in ("request_anyone", "request_specific", "request_all"):
@@ -365,10 +416,11 @@ class SessionMemory:
             event.tags = extend_tags(event.tags, extra, max_tags=9)
             updated = True
 
-        if updated:
-            store.update_event(event)
-        self.tag_pool.update_from_event(event)
-        self.tag_pool.save()
+        with self._tag_pool_lock:
+            if updated:
+                store.update_event(event)
+            self.tag_pool.update_from_event(event)
+            self.tag_pool.save()
 
     async def _update_tags_async(self, event: Event, store: Any) -> None:
         content_text = _stringify_event_content(event)
@@ -441,40 +493,51 @@ class SessionMemory:
             event.tags = extend_tags(event.tags, extra, max_tags=9)
             updated = True
 
-        if updated:
-            store.update_event(event)
-        self.tag_pool.update_from_event(event)
-        self.tag_pool.save()
+        with self._tag_pool_lock:
+            if updated:
+                store.update_event(event)
+            self.tag_pool.update_from_event(event)
+            self.tag_pool.save()
 
     def _update_team_board(self, event: Event, store: Any) -> None:
-        self.team_board.window_events.append(event.event_id)
         summary = self._summarize_event(event)
-        if self._is_boss_event(event):
-            self.team_board.update(event, summary, kind="boss")
-        if len(self.team_board.window_events) >= 6:
-            window_ids = list(self.team_board.window_events[:6])
+        window_ids: List[str] | None = None
+        with self._team_board_lock:
+            self.team_board.window_events.append(event.event_id)
+            if self._is_boss_event(event):
+                self.team_board.update(event, summary, kind="boss")
+            if len(self.team_board.window_events) >= 6:
+                window_ids = list(self.team_board.window_events[:6])
+                self.team_board.window_events = self.team_board.window_events[6:]
+            self.team_board.save()
+        if window_ids:
             window_summary = self._summarize_window(window_ids, store) or f"最近 6 条事件总结：{summary}"
-            self.team_board.entries.append(
-                {"kind": "window", "summary": window_summary, "event_ids": window_ids}
-            )
-            self.team_board.window_events = self.team_board.window_events[6:]
-        self.team_board.save()
+            with self._team_board_lock:
+                self.team_board.entries.append(
+                    {"kind": "window", "summary": window_summary, "event_ids": window_ids}
+                )
+                self.team_board.save()
 
     async def _update_team_board_async(self, event: Event, store: Any) -> None:
-        self.team_board.window_events.append(event.event_id)
         summary = await self._summarize_event_async(event)
-        if self._is_boss_event(event):
-            self.team_board.update(event, summary, kind="boss")
-        if len(self.team_board.window_events) >= 6:
-            window_ids = list(self.team_board.window_events[:6])
+        window_ids: List[str] | None = None
+        with self._team_board_lock:
+            self.team_board.window_events.append(event.event_id)
+            if self._is_boss_event(event):
+                self.team_board.update(event, summary, kind="boss")
+            if len(self.team_board.window_events) >= 6:
+                window_ids = list(self.team_board.window_events[:6])
+                self.team_board.window_events = self.team_board.window_events[6:]
+            self.team_board.save()
+        if window_ids:
             window_summary = await self._summarize_window_async(window_ids, store)
             if not window_summary:
                 window_summary = f"最近 6 条事件总结：{summary}"
-            self.team_board.entries.append(
-                {"kind": "window", "summary": window_summary, "event_ids": window_ids}
-            )
-            self.team_board.window_events = self.team_board.window_events[6:]
-        self.team_board.save()
+            with self._team_board_lock:
+                self.team_board.entries.append(
+                    {"kind": "window", "summary": window_summary, "event_ids": window_ids}
+                )
+                self.team_board.save()
 
     def _score_reference_weights(self, event: Event, store: Any) -> None:
         if not event.references:

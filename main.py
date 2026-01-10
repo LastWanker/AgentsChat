@@ -138,6 +138,14 @@ def run_session(cfg: RuntimeConfig):
         print("[main.py] 🧹 等待后台维护任务全部完成…")
         rt.controller.memory.wait_for_maintenance()
         print("[main.py] ✅ 后台维护任务已清空。")
+        print("[main.py] 🛑 正在关闭后台维护线程…")
+        rt.controller.memory.shutdown()
+        print("[main.py] ✅ 后台维护线程已关闭。")
+    if rt.ui_server:
+        print("[main.py] 🧯 正在关闭 Live UI server…")
+        rt.ui_server.shutdown()
+        rt.ui_server.server_close()
+        print("[main.py] ✅ Live UI server 已关闭。")
     for ag in cfg.agents:
         print(
             f"[main.py] 🧠 Agent {ag.name} 记忆 {len(getattr(ag, 'memory', []))} 条: {getattr(ag, 'memory', [])}"
