@@ -134,6 +134,10 @@ def run_session(cfg: RuntimeConfig):
     print(
         f"[main.py] 🏁 运行结束：world.events={len(rt.world.events)}，store 总事件={len(rt.store.all())}。"
     )
+    if rt.controller.memory:
+        print("[main.py] 🧹 等待后台维护任务全部完成…")
+        rt.controller.memory.wait_for_maintenance()
+        print("[main.py] ✅ 后台维护任务已清空。")
     for ag in cfg.agents:
         print(
             f"[main.py] 🧠 Agent {ag.name} 记忆 {len(getattr(ag, 'memory', []))} 条: {getattr(ag, 'memory', [])}"

@@ -180,7 +180,7 @@ class SessionMemory:
         llm_mode: str = "sync",
         maintenance_enabled: bool = True,
         maintenance_workers: int = 2,
-        maintenance_llm_concurrency: int = 3,
+        maintenance_llm_concurrency: Optional[int] = None,
     ) -> None:
         self.base_dir = base_dir
         self.tasks_dir = base_dir / "personal_tasks"
@@ -191,7 +191,10 @@ class SessionMemory:
         self._agents = {getattr(agent, "id"): agent for agent in agents}
         self._maintenance_enabled = maintenance_enabled
         self._maintenance_workers = max(1, maintenance_workers)
-        self._maintenance_llm_concurrency = max(1, maintenance_llm_concurrency)
+        if maintenance_llm_concurrency is None or maintenance_llm_concurrency <= 0:
+            self._maintenance_llm_concurrency = None
+        else:
+            self._maintenance_llm_concurrency = max(1, maintenance_llm_concurrency)
         self._maintenance_loop: Optional[asyncio.AbstractEventLoop] = None
         self._maintenance_queue: Optional[asyncio.Queue] = None
         self._maintenance_thread: Optional[threading.Thread] = None
@@ -219,7 +222,8 @@ class SessionMemory:
             asyncio.set_event_loop(loop)
             self._maintenance_loop = loop
             self._maintenance_queue = asyncio.Queue()
-            self._llm_semaphore = asyncio.Semaphore(self._maintenance_llm_concurrency)
+            if self._maintenance_llm_concurrency is not None:
+                self._llm_semaphore = asyncio.Semaphore(self._maintenance_llm_concurrency)
             for _ in range(self._maintenance_workers):
                 loop.create_task(self._maintenance_worker())
             ready.set()
@@ -263,6 +267,19 @@ class SessionMemory:
         self._update_tags(event, store)
         self._update_team_board(event, store)
         self._score_reference_weights(event, store)
+
+    def wait_for_maintenance(self, timeout: Optional[float] = None) -> bool:
+        if not self._maintenance_loop or not self._maintenance_queue:
+            return True
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self._maintenance_queue.join(), self._maintenance_loop
+            )
+            future.result(timeout=timeout)
+            return True
+        except Exception as exc:  # noqa: BLE001 - best-effort drain
+            print(f"[events/session_memory.py] ⚠️ 等待维护任务失败: {type(exc).__name__}: {exc}")
+            return False
 
     @asynccontextmanager
     async def _llm_guard(self) -> Any:
