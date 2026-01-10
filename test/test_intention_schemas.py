@@ -11,7 +11,6 @@ class TestIntentionDraft:
             draft_text="回应最新的发言并引用历史决策",
             retrieval_tags=["讨论", "决策"],
             retrieval_keywords=["进度"],
-            target_scope="public",
         )
 
         payload = draft.to_dict()
@@ -32,10 +31,9 @@ class TestFinalIntention:
 
     def test_normalization_and_conversion(self):
         final = FinalIntention(
-            kind="submit",
-            payload={"result": "ok"},
+            kind="speak",
+            payload={"text": "ok"},
             references=["evt-2", {"event_id": "evt-3", "weight": {"dependency": 1}}],
-            target_scope="group:1",
             tags=["agent", "领域"],
         )
 
@@ -44,7 +42,6 @@ class TestFinalIntention:
         assert restored.references[0]["weight"]["stance"] == 0.1
 
         intention: Intention = restored.to_intention(
-            agent_id="agent-1", intention_id="int-1", scope="group:1"
+            agent_id="agent-1", intention_id="int-1"
         )
-        assert intention.scope == "group:1"
         assert intention.references[1]["weight"]["dependency"] == 1

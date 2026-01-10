@@ -1,38 +1,13 @@
-# Intent production policy: two-phase workflow for LLM/非LLM 兼容
-# 拆分自 intent_proposal.yaml，专注于“怎么想/怎么写”，而不是世界允许哪些事件类型。
+policy:
+  name: IntentGenerationPolicy
+  role: forward_generation
+  audience: llm
+  description: >
+    该策略描述如何把事件转换为意向草稿。
+    目前仅保留 speak 行为和 tags 检索。
 
-schema:
-  draft:
-    description: >-
-      IntentionDraft 只关心“做什么”和“要查什么”，禁止出现 references。
-      输出 draft_text + retrieval_tags/keywords，必要时注明 target_scope/visibility。
-    fields:
-      kind: speak | submit | evaluation | ...
-      draft_text: 面向群内其他成员的草稿文本（我打算说/提交的内容）。
-      retrieval_tags: ["tag1", "tag2"]  # 优先从 tags 池选取
-      retrieval_keywords: ["额外关键词"]  # 非 tags 池关键词
-    guardrails:
-      - 禁止直接生成 references
-
-  finalize:
-    description: >-
-      FinalIntention 输出最终 payload，references 由系统自动继承 resolver 的引用列表。
-    fields:
-      kind: 与 draft 对齐
-      payload: {text|result|score|...}
-      tags: ["agent", "领域", "..."]
-      references:
-        - event_id: <required>
-          weight:
-            stance: -1.0..1.0   # 反对(-1)到支持(1)
-            inspiration: 0.0..1.0  # 启发程度
-            dependency: 0.0..1.0  # 依赖程度
-      completed: true|false
-    guardrails:
-      - references 不能为空
-      - payload 需与 kind 匹配，不得留空
-      - 最终文本必须是群聊内的直接输出，而非“我打算做什么”
-
-notes:
-  - 该文件仅描述意向生成流程，事件类型/字段要求仍由 intent_proposal.yaml 定义。
-  - 规则/假数据模式也应遵守同样的形状，确保流程可落盘、可测试。
+output:
+  - kind: speak
+  - payload: {text}
+  - draft_text + retrieval_tags/keywords
+  - confidence/motivation/urgency

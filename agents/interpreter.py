@@ -202,33 +202,21 @@ class IntentInterpreter:
 
         kind = it.get("kind")
         if not kind:
-            decision = self._decision(
-                "suppressed",
-                [{"kind": "require", "rule": "missing kind", "detail": "intention.kind"}],
-            )
             print(
-                f"[agents/interpreter.py] ⚠️ 意向缺少 kind 字段，直接压制：{decision}."
+                "[agents/interpreter.py] ⚠️ 意向缺少 kind 字段，回退为 speak。"
             )
-            return decision
+            if hasattr(intention, "kind"):
+                intention.kind = "speak"
+            kind = "speak"
+            it["kind"] = "speak"
 
         ruleset = self.kinds.get(kind)
         if not ruleset:
-            if not self.allow_unknown_kind:
-                decision = self._decision(
-                    "suppressed",
-                    [{"kind": "forbid", "rule": f"unknown kind {kind}", "detail": kind}],
-                )
-                print(
-                    f"[agents/interpreter.py] ❔ 未找到 {kind} 的规则，压制：{decision}."
-                )
-                return decision
-
             decision = self._decision(
-                "approved",
                 [{"kind": "warn", "rule": f"unknown kind {kind}", "detail": kind}],
             )
             print(
-                f"[agents/interpreter.py] ⚠️ 未找到 {kind} 的规则，但允许未知类型通过：{decision}."
+                f"[agents/interpreter.py] ℹ️ 未找到 {kind} 的规则，默认放行：{decision}."
             )
             return decision
 
@@ -240,14 +228,7 @@ class IntentInterpreter:
         # 2) forbid
         violations.extend(self._check_forbid(ruleset.get("forbid"), it, ag, world, store))
 
-        if violations:
-            decision = self._decision("suppressed", violations)
-            print(
-                f"[agents/interpreter.py] 🚫 意向 {it.get('intention_id', '<no-id>')} 未通过：{violations}."
-            )
-            return decision
-
-        decision = self._decision("approved", [])
+        decision = self._decision(violations)
         print(
             f"[agents/interpreter.py] ✅ 意向 {it.get('intention_id', '<no-id>')} 通过审查。"
         )
@@ -266,7 +247,7 @@ class IntentInterpreter:
             if not self._has_path(it, path):
                 violations.append({"kind": "require", "rule": f"missing field {path}", "detail": path})
 
-        # require.references: { min?, event_types? }
+        # require.references: { min? }
         ref_req = require_block.get("references")
         if ref_req:
             refs = it.get("references") or []
@@ -276,28 +257,6 @@ class IntentInterpreter:
                 min_n = ref_req.get("min")
                 if isinstance(min_n, int) and len(refs) < min_n:
                     violations.append({"kind": "require", "rule": f"references < {min_n}", "detail": str(len(refs))})
-
-                allowed_types = ref_req.get("event_types") or []
-                if allowed_types:
-                    try:
-                        ok = self._any_ref_type_in(refs, allowed_types, store)
-                    except Exception:
-                        violations.append(
-                            {
-                                "kind": "require",
-                                "rule": "store_missing",
-                                "detail": "references.event_types needs store",
-                            }
-                        )
-                    else:
-                        if not ok:
-                            violations.append(
-                                {
-                                    "kind": "require",
-                                    "rule": "reference type mismatch",
-                                    "detail": str(allowed_types),
-                                }
-                            )
 
         return violations
 
@@ -327,10 +286,10 @@ class IntentInterpreter:
         return violations
 
     # ---------------- helpers ----------------
-    def _decision(self, status: str, violations: List[Dict[str, str]]):
-        payload = {"status": status, "violations": violations}
+    def _decision(self, violations: List[Dict[str, str]]):
+        payload = {"status": "approved", "violations": violations}
         if Decision is not None:
-            return Decision(status=status, violations=violations)
+            return Decision(status="approved", violations=violations)
         return payload
 
     def _has_path(self, root: Dict[str, Any], dotted: str) -> bool:
@@ -340,19 +299,6 @@ class IntentInterpreter:
                 return False
             cur = cur[part]
         return True
-
-    def _any_ref_type_in(self, refs: List, allowed_types: List[str], store) -> bool:
-        if store is None:
-            raise RuntimeError("store missing")
-        for ref in refs:
-            ev = store.get(ref_event_id(ref))
-            if not ev:
-                continue
-            # ev 可能是 dataclass，也可能是 dict
-            evd = _to_dict(ev)
-            if evd.get("type") in allowed_types:
-                return True
-        return False
 
     def _eval_expr(self, expr: str, it, ag, world, store) -> bool:
         referenced_event = None

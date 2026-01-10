@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Literal, Optional, TypedDict
 from datetime import datetime, UTC
 
 from events.id_generator import next_event_id
-Scope = str  # "public" or "group:<id>"
 
 
 class RefWeight(TypedDict, total=False):
@@ -22,18 +21,13 @@ class Reference(TypedDict, total=False):
 class Intention:
     intention_id: str
     agent_id: str
-    kind: str  # speak / submit / ...
+    kind: str  # speak / ...
     payload: Dict[str, Any]  # draft content
-    scope: Scope = "public"
     references: List[Reference] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
-    completed: bool = True
     confidence: float = 0.0
     motivation: float = 0.0
     urgency: float = 0.0
-    status: Literal["pending", "suppressed", "approved", "executed"] = "pending"
-    deferred_until_tick: Optional[int] = None
-    deferred_until_time: Optional[float] = None
 
     def __post_init__(self):
         from events.references import normalize_references
@@ -46,27 +40,24 @@ class Event:
     type: str
     timestamp: str
     sender: str
-    scope: Scope
     content: Dict[str, Any]
     references: List[Reference] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
     recipients: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    completed: bool = True
 
 
 @dataclass
 class Decision:
-    status: Literal["approved", "suppressed"]
+    status: Literal["approved"]
     violations: List[Dict[str, str]] = field(default_factory=list)
 
 
-def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
+def new_event(*, sender: str, type: str, content: Dict[str, Any],
               references: Optional[List[Reference | str]] = None,
               tags: Optional[List[str]] = None,
               recipients: Optional[List[str]] = None,
-              metadata: Optional[Dict[str, Any]] = None,
-              completed: bool = True) -> Event:
+              metadata: Optional[Dict[str, Any]] = None) -> Event:
     from events.references import normalize_references
 
     return Event(
@@ -74,11 +65,9 @@ def new_event(*, sender: str, type: str, scope: Scope, content: Dict[str, Any],
         type=type,
         timestamp=datetime.now(UTC).isoformat(),
         sender=sender,
-        scope=scope,
         content=content,
         references=normalize_references(references or []),
         tags=list(tags or []),
         recipients=recipients or [],
         metadata=metadata or {},
-        completed=completed,
     )

@@ -28,14 +28,13 @@ def build_intention_prompt(
     system = (
         "你在一个工作群聊中参与讨论。"
         "输出必须是 JSON，且严格遵守给定 schema。"
-        "当触发事件为 request_* 且 completed=False 时，优先产出 kind=submit。"
-        "draft 阶段的 draft_text 表示你打算对群里说/提交的草稿内容。"
+        "draft 阶段的 draft_text 表示你打算对群里说的草稿内容。"
         "finalize 阶段必须生成面向其他成员的最终成文内容，不要输出“我打算做什么”。"
         "draft 阶段必须提供意愿三维：confidence(了解程度)、motivation(兴趣/意愿)、urgency(自我信息重要性)，范围 0~1。"
         "draft 阶段需要输出 6~12 个 retrieval_tags，可适度补充 retrieval_keywords。"
         "finalize 阶段 references 将由系统自动填充，weight 采用默认值。"
-        "event type 的选择必须与 draft_text 保持一致："
-        "你打算说话就用 speak/speak_public，想提交结果就用 submit，想发起请求就用 request_*，想评价就用 evaluation。"
+        "kind 的选择必须与 draft_text 保持一致："
+        "你打算说话就用 speak。"
         "阶段为：{phase}。"
         "\n你的名字是：{agent_name}"
         "\n始终以 {agent_name} 的身份思考与输出，不要混淆或扮演其他成员。"
@@ -52,8 +51,6 @@ def build_intention_prompt(
         "当前触发事件如下：",
         f"sender={trigger_event.get('sender')}",
         f"type={trigger_event.get('type')}",
-        f"scope={trigger_event.get('scope')}",
-        f"completed={trigger_event.get('completed')}",
         f"content={trigger_event.get('content', trigger_event.get('payload'))}",
         "最近事件（可参考）：",
         json.dumps(recent_events or [], ensure_ascii=False),

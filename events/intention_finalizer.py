@@ -55,9 +55,7 @@ class IntentionFinalizer:
                 kind=draft.kind,
                 payload=self._payload_for_kind(draft),
                 references=weighted_refs,
-                target_scope=draft.target_scope,
                 tags=self._default_tags(draft),
-                completed=self._completed_for_kind(draft.kind),
                 confidence=draft.confidence,
                 motivation=draft.motivation,
                 urgency=draft.urgency,
@@ -66,7 +64,6 @@ class IntentionFinalizer:
         return final.to_intention(
             agent_id=agent_id,
             intention_id=intention_id,
-            scope=draft.target_scope,
             confidence=draft.confidence,
             motivation=draft.motivation,
             urgency=draft.urgency,
@@ -76,14 +73,6 @@ class IntentionFinalizer:
     def _payload_for_kind(draft: IntentionDraft) -> dict:
         kind = (draft.kind or "").lower()
         message = IntentionFinalizer._normalize_message(draft.draft_text or draft.message_plan)
-        if kind in ("speak", "speak_public"):
-            return {"text": message}
-        if kind == "submit":
-            return {"result": message}
-        if kind == "evaluation":
-            return {"score": message}
-        if kind in ("request_anyone", "request_specific", "request_all"):
-            return {"request": message}
         return {"text": message}
 
     def _use_llm(self) -> bool:
@@ -104,7 +93,6 @@ class IntentionFinalizer:
         trigger_event = {
             "sender": draft.agent_id,
             "type": draft.kind,
-            "scope": draft.target_scope,
             "content": self._payload_for_kind(draft),
         }
         messages = build_intention_prompt(
@@ -147,7 +135,6 @@ class IntentionFinalizer:
         final.payload = self._normalize_payload(final.kind, final.payload)
         final.references = self._apply_weight_defaults(candidate_refs)
         final.tags = final.tags or self._default_tags(draft)
-        final.completed = self._completed_for_kind(draft.kind)
         final.confidence = draft.confidence
         final.motivation = draft.motivation
         final.urgency = draft.urgency
@@ -191,14 +178,6 @@ class IntentionFinalizer:
         return weighted
 
     @staticmethod
-    def _completed_for_kind(kind: str) -> bool:
-        return (kind or "").lower() not in (
-            "request_anyone",
-            "request_specific",
-            "request_all",
-        )
-
-    @staticmethod
     def _default_tags(draft: IntentionDraft) -> List[str]:
         base_text = draft.draft_text or draft.message_plan
         domain = (draft.agent_expertise or [])
@@ -211,6 +190,7 @@ class IntentionFinalizer:
 
     @staticmethod
     def _normalize_message(value: Any) -> str:
+        global json
         if isinstance(value, str):
             text = value.strip()
             if text.startswith("{") and text.endswith("}"):
@@ -222,7 +202,7 @@ class IntentionFinalizer:
                     return text
             return text
         if isinstance(value, dict):
-            for key in ("text", "content", "message", "result", "request", "score"):
+            for key in ("text", "content", "message"):
                 if key in value and value[key] is not None:
                     return IntentionFinalizer._normalize_message(value[key])
             import json
@@ -235,18 +215,10 @@ class IntentionFinalizer:
     @classmethod
     def _normalize_payload(cls, kind: str, payload: Any) -> Dict[str, Any]:
         expected_key = "text"
-        kind = (kind or "").lower()
-        if kind == "submit":
-            expected_key = "result"
-        elif kind == "evaluation":
-            expected_key = "score"
-        elif kind in ("request_anyone", "request_specific", "request_all"):
-            expected_key = "request"
-
         if isinstance(payload, dict):
             if expected_key in payload and payload[expected_key] is not None:
                 return {expected_key: cls._normalize_message(payload[expected_key])}
-            for key in ("text", "content", "message", "result", "request", "score"):
+            for key in ("text", "content", "message"):
                 if key in payload and payload[key] is not None:
                     return {expected_key: cls._normalize_message(payload[key])}
             return {expected_key: cls._normalize_message(payload)}

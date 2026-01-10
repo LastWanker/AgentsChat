@@ -16,7 +16,6 @@ class World:
         """
         observer 需要至少有：
         - observer.id
-        - observer.scope
         - observer.on_event(event)
         """
         self.observers.append(observer)
@@ -25,22 +24,7 @@ class World:
         )
 
     def _is_visible(self, event: Dict[str, Any], observer) -> bool:
-        """
-        世界唯一的“规则函数”：可见性判断
-        """
-        event_scope = event.get("scope", "public")
-        observer_scope = getattr(observer, "scope", "public")
-
-        # public 事件：所有人可见
-        if event_scope == "public":
-            return True
-
-        # public 观察者：能看到一切
-        if observer_scope == "public":
-            return True
-
-        # 同 scope：可见
-        return event_scope == observer_scope
+        return True
 
     def emit(self, event: Any):
         """

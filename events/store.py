@@ -86,30 +86,6 @@ class EventStore:
             f"[events/store.py] 🗃️ 收纳事件 {event.event_id}，类型 {event.type}。",
         )
 
-    def mark_completed(self, event_id: str) -> bool:
-        """Mark an existing event as completed and persist the change.
-
-        Returns True if the flag was updated, False otherwise.
-        """
-        ev = self.get(event_id)
-        if ev is None:
-            print(
-                f"[events/store.py] ⚠️ 无法标记完成：事件 {event_id} 不存在。"
-            )
-            return False
-        if getattr(ev, "completed", False):
-            print(
-                f"[events/store.py] ℹ️ 事件 {event_id} 已是 completed，无需更新。"
-            )
-            return False
-
-        ev.completed = True
-        self._upsert_event(ev)
-        print(
-            f"[events/store.py] ✅ 已将事件 {event_id} 标记为 completed，索引与文件已更新。"
-        )
-        return True
-
     def update_event(self, event: Event) -> None:
         """Persist an updated event record."""
         self._upsert_event(event)
@@ -322,5 +298,4 @@ class EventStore:
             "type": data.get("type"),
             "timestamp": data.get("timestamp"),
             "sender": data.get("sender"),
-            "scope": data.get("scope"),
         }

@@ -221,7 +221,7 @@ class SessionMemory:
         *,
         summary: str,
         event_ids: Iterable[str],
-        kind: str = "request_completion",
+        kind: str = "summary",
     ) -> None:
         cleaned_ids = [event_id for event_id in event_ids if event_id]
         with self._team_board_lock:
@@ -286,14 +286,12 @@ class SessionMemory:
             self._update_personal_tasks_async(event),
             self._update_tags_async(event, store),
             self._update_team_board_async(event, store),
-            self._score_reference_weights_async(event, store),
         )
 
     def _run_maintenance_sync(self, event: Event, store: Any) -> None:
         self._update_personal_tasks(event)
         self._update_tags(event, store)
         self._update_team_board(event, store)
-        self._score_reference_weights(event, store)
 
     def wait_for_maintenance(self, timeout: Optional[float] = None) -> bool:
         if not self._maintenance_loop or not self._maintenance_queue:
@@ -325,6 +323,36 @@ class SessionMemory:
             async with self._llm_guard():
                 return await self.llm_client.acomplete(messages, options=options)
         return await asyncio.to_thread(self._complete, messages, options)
+
+    def _complete(self, messages: List[Dict[str, str]], options: LLMRequestOptions) -> str:
+        if self.llm_client is None:
+            return ""
+        if self.llm_mode == "async":
+            return self._run_coroutine_sync(self.llm_client.acomplete(messages, options=options))
+        if self.llm_mode == "stream":
+            return "".join(self.llm_client.stream(messages, options=options))
+        return self.llm_client.complete(messages, options=options)
+
+    def _run_coroutine_sync(self, coro: Any) -> Any:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        result: dict[str, Any] = {}
+        error: dict[str, BaseException] = {}
+
+        def _runner() -> None:
+            try:
+                result["value"] = asyncio.run(coro)
+            except BaseException as exc:
+                error["value"] = exc
+
+        thread = threading.Thread(target=_runner, daemon=True)
+        thread.start()
+        thread.join()
+        if "value" in error:
+            raise error["value"]
+        return result.get("value")
 
     def handle_event(self, event: Event, store: Any) -> None:
         if self._maintenance_enabled:
@@ -374,11 +402,6 @@ class SessionMemory:
             self._personal_task_locks[agent_id] = lock
         with lock:
             table = self.personal_table_for(agent_id)
-            if event.sender != agent_id:
-                if event.type in ("request_anyone", "request_specific", "request_all"):
-                    if self._should_add_todo(event, agent_id):
-                        summary = self._summarize_event_for_tasks(event)
-                        table.add_todo(event.sender, event.event_id, summary)
             if event.sender == agent_id:
                 table.move_todos_to_done(event)
                 table.add_done([event.event_id], self._summarize_event_for_tasks(event), memory=False)
@@ -553,191 +576,8 @@ class SessionMemory:
                 )
                 self.team_board.save()
 
-    def _score_reference_weights(self, event: Event, store: Any) -> None:
-        if not event.references:
-            return
-        if self.llm_client is None:
-            return
-        refs = normalize_references(event.references)
-        if self.llm_mode == "async":
-            updated, refs = self._run_coroutine_sync(
-                self._score_reference_weights_async_for_refs(event, refs, store)
-            )
-        else:
-            updated, refs = self._score_reference_weights_sync(event, refs, store)
-        if updated:
-            event.references = normalize_references(refs)
-            store.update_event(event)
-
-    async def _score_reference_weights_async(self, event: Event, store: Any) -> None:
-        if not event.references:
-            return
-        if self.llm_client is None:
-            return
-        refs = normalize_references(event.references)
-        if self.llm_mode == "async":
-            updated, refs = await self._score_reference_weights_async_for_refs(event, refs, store)
-        else:
-            updated, refs = await asyncio.to_thread(
-                self._score_reference_weights_sync, event, refs, store
-            )
-        if updated:
-            event.references = normalize_references(refs)
-            store.update_event(event)
-
-    def _score_reference_weights_sync(
-        self, event: Event, refs: List[Dict[str, Any]], store: Any
-    ) -> tuple[bool, List[Dict[str, Any]]]:
-        updated = False
-        new_refs: List[Dict[str, Any]] = []
-        for ref in refs:
-            ref_event_id = ref.get("event_id")
-            ref_event = store.get(ref_event_id) if ref_event_id else None
-            if not ref_event:
-                new_refs.append(ref)
-                continue
-            weight = dict(ref.get("weight", {}) or {})
-            for dim in ("dependency", "inspiration", "stance"):
-                score = self._score_dimension(event, ref_event, dim)
-                if score is None:
-                    continue
-                weight[dim] = score
-                updated = True
-            ref["weight"] = weight
-            new_refs.append(ref)
-        return updated, new_refs
-
-    async def _score_reference_weights_async_for_refs(
-        self, event: Event, refs: List[Dict[str, Any]], store: Any
-    ) -> tuple[bool, List[Dict[str, Any]]]:
-        tasks = []
-        meta: List[tuple[int, str]] = []
-        for idx, ref in enumerate(refs):
-            ref_event_id = ref.get("event_id")
-            ref_event = store.get(ref_event_id) if ref_event_id else None
-            if not ref_event:
-                continue
-            for dim in ("dependency", "inspiration", "stance"):
-                tasks.append(self._score_dimension_async(event, ref_event, dim))
-                meta.append((idx, dim))
-        if not tasks:
-            return False, refs
-        results = await self._gather_scores(tasks)
-        updated = False
-        for (idx, dim), score in zip(meta, results):
-            if score is None:
-                continue
-            weight = dict(refs[idx].get("weight", {}) or {})
-            weight[dim] = score
-            refs[idx]["weight"] = weight
-            updated = True
-        return updated, refs
-
-    async def _gather_scores(self, tasks: List[Any]) -> List[Optional[float]]:
-        import asyncio
-
-        return await asyncio.gather(*tasks)
-
-    def _run_coroutine_sync(self, coro: Any) -> Any:
-        import asyncio
-        import threading
-
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(coro)
-        result: dict[str, Any] = {}
-        error: dict[str, BaseException] = {}
-
-        def _runner() -> None:
-            try:
-                result["value"] = asyncio.run(coro)
-            except BaseException as exc:
-                error["value"] = exc
-
-        thread = threading.Thread(target=_runner, daemon=True)
-        thread.start()
-        thread.join()
-        if "value" in error:
-            raise error["value"]
-        return result.get("value")
-
-    def _score_dimension(self, event: Event, ref_event: Event, dimension: str) -> Optional[float]:
-        rubric = _SCORE_RUBRICS.get(dimension)
-        if not rubric:
-            return None
-        relation_hint = _SCORE_RELATIONS.get(dimension, "")
-        prompt = self._score_prompt(event, ref_event, dimension, rubric, relation_hint)
-        options = LLMRequestOptions(temperature=0.0, max_tokens=8)
-        messages = [{"role": "system", "content": "你是严谨的评分器。"}, {"role": "user", "content": prompt}]
-        content = self._complete(messages, options)
-        return _parse_score(content)
-
-    async def _score_dimension_async(
-        self, event: Event, ref_event: Event, dimension: str
-    ) -> Optional[float]:
-        rubric = _SCORE_RUBRICS.get(dimension)
-        if not rubric:
-            return None
-        relation_hint = _SCORE_RELATIONS.get(dimension, "")
-        prompt = self._score_prompt(event, ref_event, dimension, rubric, relation_hint)
-        options = LLMRequestOptions(temperature=0.0, max_tokens=8)
-        messages = [{"role": "system", "content": "你是严谨的评分器。"}, {"role": "user", "content": prompt}]
-        async with self._llm_guard():
-            content = await self.llm_client.acomplete(messages, options=options)
-        return _parse_score(content)
-
-    def _score_prompt(
-        self,
-        event: Event,
-        ref_event: Event,
-        dimension: str,
-        rubric: str,
-        relation_hint: str,
-    ) -> str:
-        return (
-            "你是评分器，只输出一个数字。\n"
-            f"维度：{dimension}\n"
-            f"关系：{relation_hint}\n"
-            f"量表：{rubric}\n"
-            "主体事件：" + self._brief_event(event) + "\n"
-            "被引用事件：" + self._brief_event(ref_event) + "\n"
-            "只输出一个数字。"
-        )
-
-    def _complete(self, messages: List[Dict[str, str]], options: LLMRequestOptions) -> str:
-        if self.llm_client is None:
-            return ""
-        if self.llm_mode == "async":
-            return self._run_coroutine_sync(self.llm_client.acomplete(messages, options=options))
-        if self.llm_mode == "stream":
-            return "".join(self.llm_client.stream(messages, options=options))
-        return self.llm_client.complete(messages, options=options)
-
     def _is_boss_event(self, event: Event) -> bool:
         return str(event.sender).upper() == "BOSS" or str(event.sender) == "0"
-
-    def _should_add_todo(self, event: Event, agent_id: str) -> bool:
-        if not self._is_event_visible_to_agent(event, agent_id):
-            return False
-        recipients = set(event.recipients or [])
-        if event.type == "request_specific":
-            return agent_id in recipients
-        if event.type in ("request_anyone", "request_all"):
-            return agent_id != event.sender
-        return False
-
-    def _is_event_visible_to_agent(self, event: Event, agent_id: str) -> bool:
-        agent = self._agents.get(agent_id)
-        if agent is None:
-            return False
-        event_scope = event.scope
-        agent_scope = getattr(agent, "scope", "public")
-        if event_scope == "public":
-            return True
-        if agent_scope == "public":
-            return True
-        return event_scope == agent_scope
 
     def _summarize_event(self, event: Event) -> str:
         llm_summary = self._summarize_event_with_llm(event)
@@ -745,7 +585,7 @@ class SessionMemory:
             return llm_summary
         content = event.content or {}
         if isinstance(content, dict):
-            for key in ("text", "result", "request", "score"):
+            for key in ("text", "content", "message"):
                 if key in content and content[key]:
                     return str(content[key])
         return json.dumps(content, ensure_ascii=False)
@@ -756,7 +596,7 @@ class SessionMemory:
             return llm_summary
         content = event.content or {}
         if isinstance(content, dict):
-            for key in ("text", "result", "request", "score"):
+            for key in ("text", "content", "message"):
                 if key in content and content[key]:
                     return str(content[key])
         return json.dumps(content, ensure_ascii=False)
@@ -874,38 +714,3 @@ class SessionMemory:
         if len(text) <= max_len:
             return text
         return text[: max_len - 1] + "…"
-
-    def _brief_event(self, event: Event, max_len: int = 120) -> str:
-        summary = self._compact_summary(self._summarize_event(event), max_len=max_len)
-        return f"{event.type}/{event.sender}:{summary}"
-
-
-_SCORE_RUBRICS = {
-    "dependency": (
-        "0完全无关,0.1似有若无,0.2略微相关,0.3轻度关联,0.4有依赖性,0.5明显依赖,"
-        "0.6较强依赖,0.7核心依赖,0.8核心一致,0.9几乎复述,1完全转述"
-    ),
-    "inspiration": (
-        "0毫无启发,0.1似有若无,0.2略微影响,0.3轻度影响,0.4影响思路,0.5贡献明显,"
-        "0.6较强影响,0.7核心思路,0.8思路一致,0.9按部就班,1完全遵照"
-    ),
-    "stance": (
-        "-1完全对立,-0.9难以弥合,-0.8核心对立,-0.7核心冲突,-0.6较强否认,-0.5明显否认,"
-        "-0.4否认态度,-0.3轻度否认,-0.2略感不对,-0.1将信将疑,0无关对错,0.1难说是错,"
-        "0.2勉强认可,0.3轻度认可,0.4大致认可,0.5明确认可,0.6较为赞许,0.7核心相似,"
-        "0.8核心一致,0.9几乎一致,1完全一致"
-    ),
-}
-
-_SCORE_RELATIONS = {
-    "dependency": "被引用事件对主体事件的依赖程度",
-    "inspiration": "被引用事件对主体事件的启发程度",
-    "stance": "主体事件对被引用事件的态度",
-}
-
-
-def _parse_score(content: Any) -> Optional[float]:
-    try:
-        return float(str(content).strip())
-    except (TypeError, ValueError):
-        return None

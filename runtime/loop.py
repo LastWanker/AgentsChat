@@ -1,3 +1,5 @@
+import time
+
 from events.intention_finalizer import IntentionFinalizer
 from events.intention_schemas import IntentionDraft
 from events.tagging import generate_tags
@@ -22,23 +24,22 @@ class RuntimeLoop:
         self.idle_wait_sec = idle_wait_sec
 
     def tick(self):
+        start_time = time.monotonic()
         agent, wait_sec = self.scheduler.choose_agent(self.controller.agents, loop_tick=self._tick_index)
         if agent is None:
             if wait_sec is not None and wait_sec > 0:
-                import time
-
                 print(
                     f"[runtime/loop.py] ⏸️ 没有可调度 Agent，等待 {wait_sec:.2f}s。"
                 )
                 time.sleep(wait_sec)
+                self._sleep_to_tick_gap(start_time)
                 return True
             print(
                 f"[runtime/loop.py] ⏳ 暂无 Agent 可调度，等待 {self.idle_wait_sec:.2f}s。"
             )
             if self.idle_wait_sec > 0:
-                import time
-
                 time.sleep(self.idle_wait_sec)
+            self._sleep_to_tick_gap(start_time)
             return True
 
         draft = self.controller.propose_for_agent(agent)
@@ -48,6 +49,7 @@ class RuntimeLoop:
             )
             self.scheduler.record_turn(agent.id, loop_tick=self._tick_index)
             self._tick_index += 1
+            self._sleep_to_tick_gap(start_time)
             return True
 
         print(
@@ -66,10 +68,8 @@ class RuntimeLoop:
                 agent_id=agent.id,
                 kind="speak",
                 payload={"text": f"{agent.name}对讨论兴趣缺缺，跳过了这次发言。"},
-                scope=draft.target_scope or agent.scope,
                 references=[],
                 tags=self._fallback_tags(agent, draft),
-                completed=True,
                 confidence=draft.confidence,
                 motivation=draft.motivation,
                 urgency=draft.urgency,
@@ -87,14 +87,10 @@ class RuntimeLoop:
                 f"[runtime/loop.py] ✅ 草稿 {draft.intention_id} 完成 final 阶段，已转换成可路由的意向。"
             )
 
-        decision = self.router.handle_intention(intention_for_router, agent, tick_index=self._tick_index)
-        if decision.status == "suppressed" and any(v.get("kind") == "cooldown" for v in decision.violations):
-            print(
-                f"[runtime/loop.py] ⏳ {agent.name} 触发冷却，本轮不计入轮次。"
-            )
-        else:
-            self.scheduler.record_turn(agent.id, loop_tick=self._tick_index)
+        self.router.handle_intention(intention_for_router, agent, tick_index=self._tick_index)
+        self.scheduler.record_turn(agent.id, loop_tick=self._tick_index)
         self._tick_index += 1
+        self._sleep_to_tick_gap(start_time)
         return True
 
     @staticmethod
@@ -129,3 +125,9 @@ class RuntimeLoop:
         ]
         text = draft.draft_text or draft.message_plan
         return generate_tags(text=text, fixed_prefix=fixed, max_tags=6)
+
+    @staticmethod
+    def _sleep_to_tick_gap(start_time: float, gap_sec: float = 1.0) -> None:
+        elapsed = time.monotonic() - start_time
+        if elapsed < gap_sec:
+            time.sleep(gap_sec - elapsed)

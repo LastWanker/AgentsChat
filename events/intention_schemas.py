@@ -27,8 +27,6 @@ class IntentionDraft:
     draft_text: str = ""
     retrieval_tags: List[str] = field(default_factory=list)
     retrieval_keywords: List[str] = field(default_factory=list)
-    target_scope: Optional[str] = None
-    visibility: Optional[str] = None
     confidence: float = 0.0
     motivation: float = 0.0
     urgency: float = 0.0
@@ -62,8 +60,6 @@ class IntentionDraft:
             ),
             retrieval_tags=list(raw.get("retrieval_tags", []) or []),
             retrieval_keywords=list(raw.get("retrieval_keywords", []) or []),
-            target_scope=raw.get("target_scope"),
-            visibility=raw.get("visibility"),
             confidence=float(raw.get("confidence", 0.0)),
             motivation=float(raw.get("motivation", 0.0)),
             urgency=float(raw.get("urgency", 0.0)),
@@ -80,8 +76,6 @@ class IntentionDraft:
             "draft_text": self.draft_text,
             "retrieval_tags": list(self.retrieval_tags),
             "retrieval_keywords": list(self.retrieval_keywords),
-            "target_scope": self.target_scope,
-            "visibility": self.visibility,
             "confidence": self.confidence,
             "motivation": self.motivation,
             "urgency": self.urgency,
@@ -111,7 +105,7 @@ def _coerce_text(value: Any) -> str:
                 return text
         return text
     if isinstance(value, dict):
-        for key in ("text", "content", "message", "result", "request", "score"):
+        for key in ("text", "content", "message"):
             if key in value and value[key] is not None:
                 return _coerce_text(value[key])
         return json.dumps(value, ensure_ascii=False)
@@ -127,9 +121,7 @@ class FinalIntention:
     kind: str
     payload: Dict[str, Any]
     references: List[Reference]
-    target_scope: Optional[str] = None
     tags: List[str] = field(default_factory=list)
-    completed: bool = True
     confidence: float = 0.0
     motivation: float = 0.0
     urgency: float = 0.0
@@ -148,9 +140,7 @@ class FinalIntention:
             kind=raw["kind"],
             payload=raw.get("payload", {}),
             references=raw.get("references") or [],
-            target_scope=raw.get("target_scope"),
             tags=list(raw.get("tags", []) or []),
-            completed=bool(raw.get("completed", True)),
             confidence=float(raw.get("confidence", 0.0)),
             motivation=float(raw.get("motivation", 0.0)),
             urgency=float(raw.get("urgency", 0.0)),
@@ -161,9 +151,7 @@ class FinalIntention:
             "kind": self.kind,
             "payload": self.payload,
             "references": [dict(r) for r in self.references],
-            "target_scope": self.target_scope,
             "tags": list(self.tags),
-            "completed": self.completed,
             "confidence": self.confidence,
             "motivation": self.motivation,
             "urgency": self.urgency,
@@ -174,7 +162,6 @@ class FinalIntention:
             *,
             agent_id: str,
             intention_id: str,
-            scope: Optional[str] = None,
             confidence: float | None = None,
             motivation: float | None = None,
             urgency: float | None = None,
@@ -184,10 +171,8 @@ class FinalIntention:
             agent_id=agent_id,
             kind=self.kind,
             payload=self.payload,
-            scope=scope or self.target_scope or "public",
             references=self.references,
             tags=list(self.tags),
-            completed=self.completed,
             confidence=self.confidence if confidence is None else confidence,
             motivation=self.motivation if motivation is None else motivation,
             urgency=self.urgency if urgency is None else urgency,

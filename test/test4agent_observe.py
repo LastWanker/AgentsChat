@@ -12,11 +12,11 @@ world.add_observer(AgentObserver(a))
 world.add_observer(AgentObserver(b))
 
 # Alice 先说话
-e1 = a.speak_public("世界是圆的")
+e1 = a.speak("世界是圆的")
 world.emit(e1)
 
 # Bob 再说话
-e2 = b.speak_public("你这个结论没有论证", references=[e1["event_id"]])
+e2 = b.speak("你这个结论没有论证", references=[e1["event_id"]])
 world.emit(e2)
 
 # ====== 断言（现在可以是 print） ======

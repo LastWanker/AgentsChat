@@ -63,7 +63,7 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
     settings = load_settings()
     boss, alice, bob = _build_agents()
 
-    seed = boss.request_anyone("请大家给出系统下一步的最小可运行闭环建议")
+    seed = boss.speak("请大家给出系统下一步的最小可运行闭环建议")
     print(
         f"[main.py] 🌱 生成种子事件: {seed.get('event_id', '<no-id>')} from {seed.get('sender')}"
     )
@@ -98,11 +98,6 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
         ui_auto_open=ui_auto_open,
         ui_host=ui_host,
         ui_port=ui_port,
-        agent_cooldowns_sec={
-            "Alice": 1.5,
-            "Bob": 1.5,
-        },
-        inter_event_gap_sec=1.0,
         seed_events=[seed],
     )
 
@@ -114,7 +109,6 @@ def build_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
             "data_dir": cfg.data_dir,
             "session_id": cfg.session_id,
             "resume_session_id": cfg.resume_session_id,
-            "cooldowns": cfg.agent_cooldowns_sec,
             "seed_events": len(cfg.seed_events or []),
         },
     )

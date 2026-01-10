@@ -35,9 +35,7 @@ class AgentController:
         )
         self._latest_event: Optional[Dict[str, Any]] = None
 
-        # 让 Controller 作为 observer 时具备“看见一切”的权限
         self.id = "agent_controller"
-        self.scope = "public"
 
     # ===== World Observer 入口 =====
     def on_event(self, event: Dict[str, Any]):
@@ -73,47 +71,8 @@ class AgentController:
 
     # ===== 选人逻辑（从 legacy 迁移并扩展）=====
     def _select_agents_for_event(self, event: Dict[str, Any]) -> List:
-        etype = event.get("type")
         sender_id = event.get("sender")
-        scope = event.get("scope", "public")
-
-        # ---- request_specific：必须是 recipients ----
-        if etype == "request_specific":
-            recipients = event.get("recipients") or []
-            # 只挑收件人里真实存在、并且看得见该事件的
-            picked = []
-            for rid in recipients:
-                a = self._by_id.get(rid)
-                if a and self._is_visible(scope, a.scope):
-                    picked.append(a)
-            return picked
-
-        # ---- request_anyone：排除 sender，所有符合可见性的 Agent 都可响应 ----
-        if etype == "request_anyone":
-            cands = [
-                a for a in self.agents
-                if a.id != sender_id and self._is_visible(scope, a.scope)
-            ]
-            return cands
-
-            # ---- speak/speak_public：允许对话延续（排除发言者） ----
-        if etype in ("speak", "speak_public"):
-            cands = [
-                a for a in self.agents
-                if a.id != sender_id and self._is_visible(scope, a.scope)
-            ]
-            return cands
-
-        # 默认：其它事件不派生（避免刷屏）
-        return []
-
-    def _is_visible(self, event_scope: str, agent_scope: str) -> bool:
-        # 对齐 World._is_visible 的核心语义
-        if event_scope == "public":
-            return True
-        if agent_scope == "public":
-            return True
-        return event_scope == agent_scope
+        return [a for a in self.agents if a.id != sender_id]
 
     # ===== Context 构造 =====
     def _build_context(self, agent, trigger_event: Dict[str, Any]) -> ProposerContext:
@@ -172,7 +131,6 @@ class AgentController:
             agent_id=agent.id,
             agent_name=getattr(agent, "name", agent.id),
             agent_role=getattr(agent, "role", None),
-            scope=getattr(agent, "scope", "public"),
             agent_expertise=getattr(agent, "expertise", []) or [],
             trigger_event=trigger_event,
             store=self.store,

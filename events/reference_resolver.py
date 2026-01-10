@@ -23,29 +23,24 @@ class ReferenceResolver:
         seen: set[str] = set()
 
         draft_id = getattr(draft, "intention_id", None) or "<no-id>"
-        scope = draft.target_scope
         recent_limit = self._recent_limit(draft)
         print(
-            f"[events/reference_resolver.py] 🔍 草稿 {draft_id} 基于 tags+最近事件+关键词生成引用，scope={scope}, recent={recent_limit}."
+            f"[events/reference_resolver.py] 🔍 草稿 {draft_id} 基于 tags+最近事件+关键词生成引用，recent={recent_limit}."
         )
 
         event_ids: List[str] = []
         if self.tag_pool and draft.retrieval_tags:
             event_ids.extend(self.tag_pool.event_ids_for_tags(draft.retrieval_tags))
         if draft.retrieval_keywords:
-            if scope:
-                for ev in self.query.search(scope=scope, keywords=draft.retrieval_keywords, limit=None):
-                    event_ids.append(ev.event_id)
-        if scope:
-            event_ids.extend([ev.event_id for ev in self.query.recent(scope=scope, n=recent_limit)])
+            for ev in self.query.search(keywords=draft.retrieval_keywords, limit=None):
+                event_ids.append(ev.event_id)
+        event_ids.extend([ev.event_id for ev in self.query.recent(n=recent_limit)])
 
         for event_id in event_ids:
             if event_id in seen:
                 continue
             event = self.query.by_id(event_id)
             if not event:
-                continue
-            if scope and event.scope != scope:
                 continue
             seen.add(event_id)
             candidates.append({"event_id": event.event_id, "weight": default_ref_weight()})

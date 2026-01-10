@@ -241,12 +241,7 @@
       }
       emptyState.style.display = "none";
 
-      const latestDraftingIndex = events.reduce((latestIndex, event, index) => {
-        if (isNotice(event)) {
-          return latestIndex;
-        }
-        return event.completed === false ? index : latestIndex;
-      }, -1);
+      const latestDraftingIndex = -1;
 
       events.forEach((event, index) => {
         if (isNotice(event)) {

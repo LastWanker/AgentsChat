@@ -31,7 +31,7 @@ INTENTION_DRAFT_SCHEMA: Dict[str, Any] = {
         "urgency",
     ],
     "properties": {
-        "kind": {"type": "string", "description": "意向类型，如 speak/submit"},
+        "kind": {"type": "string", "description": "意向类型，如 speak"},
         "draft_text": {"type": "string", "description": "面向群内其他成员的草稿文本（我打算说/提交的内容）"},
         "retrieval_tags": {
             "type": "array",
@@ -46,8 +46,6 @@ INTENTION_DRAFT_SCHEMA: Dict[str, Any] = {
         "confidence": {"type": "number", "description": "对主题了解程度(0~1)"},
         "motivation": {"type": "number", "description": "兴趣/回答意愿(0~1)"},
         "urgency": {"type": "number", "description": "重要性/紧迫性(0~1)"},
-        "target_scope": {"type": "string"},
-        "visibility": {"type": "string"},
     },
 }
 
@@ -82,7 +80,6 @@ INTENTION_FINAL_SCHEMA: Dict[str, Any] = {
                 },
             },
         },
-        "completed": {"type": "boolean"},
     },
 }
 

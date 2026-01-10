@@ -13,7 +13,6 @@ from runtime.loop import RuntimeLoop
 from runtime.scheduler import Scheduler
 from platform.router import Router
 from agents.interpreter import IntentInterpreter
-from platform.request_tracker import RequestCompletionObserver
 from agents.agent import Agent
 from events.id_generator import next_event_id
 from events.store import EventStore
@@ -49,9 +48,6 @@ class RuntimeConfig:
     ui_host: str = "127.0.0.1"
     ui_port: int = 8000
 
-    # Router 纪律
-    agent_cooldowns_sec: Optional[Dict[str, float]] = None
-    inter_event_gap_sec: float = 0.0
 
     # Loop
     max_ticks: int = 50
@@ -130,13 +126,11 @@ def _normalize_seed_event(seed: Any) -> Event:
                 type=seed["type"],
                 timestamp=seed.get("timestamp", datetime.now(UTC).isoformat()),
                 sender=seed["sender"],
-                scope=seed.get("scope", "public"),
                 content=seed.get("content", {}),
                 references=normalize_references(seed.get("references", [])),
                 tags=seed.get("tags", []),
                 recipients=seed.get("recipients", []),
                 metadata=seed.get("metadata", {}),
-                completed=seed.get("completed", True),
             )
             print(
                 "[runtime/bootstrap.py] ✅ 规范化完成，生成 Event：",
@@ -150,19 +144,6 @@ def _normalize_seed_event(seed: Any) -> Event:
 
 
 def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
-    def _normalize_agent_cooldowns(
-        cooldowns_sec: Optional[Dict[str, float]], agents: List[Agent]
-    ) -> Dict[str, float]:
-        if not cooldowns_sec:
-            return {}
-
-        name_to_id = {ag.name: ag.id for ag in agents}
-        normalized: Dict[str, float] = {}
-        for key, value in cooldowns_sec.items():
-            agent_id = name_to_id.get(key, key)
-            normalized[agent_id] = value
-        return normalized
-
     # === 底座 ===
     session_meta = {
         "policy_path": cfg.policy_path,
@@ -221,13 +202,10 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
 
     # === Scheduler/Router/Controller/Loop ===
     scheduler = Scheduler()
-    cooldowns_sec = _normalize_agent_cooldowns(cfg.agent_cooldowns_sec, cfg.agents)
     router = Router(
         world=world,
         store=store,
         interpreter=interpreter,
-        cooldowns_sec=cooldowns_sec,
-        inter_event_gap_sec=cfg.inter_event_gap_sec,
     )
     controller = AgentController(
         agents=cfg.agents,
@@ -259,11 +237,6 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     # === 插线：Controller 观察世界（产出意向入队） ===
     world.add_observer(controller)
     print("[runtime/bootstrap.py] 🛰️ AgentController 也开始观察世界事件。")
-    # === 插线：Request 完成监控（生成闭环声明） ===
-    world.add_observer(
-        RequestCompletionObserver(store=store, agents=cfg.agents, memory=memory)
-    )
-    print("[runtime/bootstrap.py] ✅ RequestCompletionObserver 启用，负责记录请求完成。")
     world.add_observer(SessionMaintenanceObserver(memory=memory, store=store))
     print("[runtime/bootstrap.py] 🧹 SessionMaintenanceObserver 启用，负责事后维护。")
 

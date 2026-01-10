@@ -20,31 +20,24 @@ class EventQuery:
         return evs[-n:]
 
     # --- resolver-friendly helpers ---
-    def recent(self, scope: str, n: int = 6) -> List[Event]:
-        """Return the most recent events in a scope."""
+    def recent(self, n: int = 6) -> List[Event]:
+        """Return the most recent events."""
 
-        scoped_events = [ev for ev in self.store.all() if ev.scope == scope]
-        return self._sort_by_time(scoped_events)[:n]
+        return self._sort_by_time(self.store.all())[:n]
 
     def search(
             self,
             *,
-            scope: str,
             keywords: Sequence[str],
             limit: Optional[int] = None,
-            event_types: Optional[Sequence[str]] = None,
             after_time: Optional[str] = None,
     ) -> List[Event]:
-        """Naive keyword search with optional type and time filters."""
+        """Naive keyword search with optional time filters."""
 
         needles = [k.lower() for k in keywords if k]
         after_dt = self._parse_time(after_time) if after_time else None
 
         def matches(ev: Event) -> bool:
-            if ev.scope != scope:
-                return False
-            if event_types and ev.type not in event_types:
-                return False
             ev_dt = self._parse_time(ev.timestamp)
             if after_dt and (ev_dt is None or ev_dt <= after_dt):
                 return False

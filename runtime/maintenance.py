@@ -11,7 +11,6 @@ class SessionMaintenanceObserver:
         self.memory = memory
         self.store = store
         self.id = "session_maintenance"
-        self.scope = "public"
 
     def on_event(self, event: dict) -> None:
         if isinstance(event, Event):

@@ -4,9 +4,8 @@ class DebugObserver4world_v01:
 
 
 class DebugObserver4world_v02:
-    def __init__(self, name, scope="public"):
+    def __init__(self, name):
         self.name = name
-        self.scope = scope
 
     def on_event(self, event):
         print(f"[{self.name} sees] {event['type']} | {event['content']}")
