@@ -75,7 +75,7 @@ class IntentionFinalizer:
     @staticmethod
     def _payload_for_kind(draft: IntentionDraft) -> dict:
         kind = (draft.kind or "").lower()
-        message = draft.draft_text or draft.message_plan
+        message = IntentionFinalizer._normalize_message(draft.draft_text or draft.message_plan)
         if kind in ("speak", "speak_public"):
             return {"text": message}
         if kind == "submit":
@@ -144,6 +144,7 @@ class IntentionFinalizer:
             return None
 
         final = FinalIntention.from_dict(data)
+        final.payload = self._normalize_payload(final.kind, final.payload)
         final.references = self._apply_weight_defaults(candidate_refs)
         final.tags = final.tags or self._default_tags(draft)
         final.completed = self._completed_for_kind(draft.kind)
@@ -207,3 +208,46 @@ class IntentionFinalizer:
         ]
 
         return generate_tags(text=base_text, fixed_prefix=fixed, max_tags=6)
+
+    @staticmethod
+    def _normalize_message(value: Any) -> str:
+        if isinstance(value, str):
+            text = value.strip()
+            if text.startswith("{") and text.endswith("}"):
+                try:
+                    import json
+
+                    return IntentionFinalizer._normalize_message(json.loads(text))
+                except json.JSONDecodeError:
+                    return text
+            return text
+        if isinstance(value, dict):
+            for key in ("text", "content", "message", "result", "request", "score"):
+                if key in value and value[key] is not None:
+                    return IntentionFinalizer._normalize_message(value[key])
+            import json
+
+            return json.dumps(value, ensure_ascii=False)
+        if value is None:
+            return ""
+        return str(value)
+
+    @classmethod
+    def _normalize_payload(cls, kind: str, payload: Any) -> Dict[str, Any]:
+        expected_key = "text"
+        kind = (kind or "").lower()
+        if kind == "submit":
+            expected_key = "result"
+        elif kind == "evaluation":
+            expected_key = "score"
+        elif kind in ("request_anyone", "request_specific", "request_all"):
+            expected_key = "request"
+
+        if isinstance(payload, dict):
+            if expected_key in payload and payload[expected_key] is not None:
+                return {expected_key: cls._normalize_message(payload[expected_key])}
+            for key in ("text", "content", "message", "result", "request", "score"):
+                if key in payload and payload[key] is not None:
+                    return {expected_key: cls._normalize_message(payload[key])}
+            return {expected_key: cls._normalize_message(payload)}
+        return {expected_key: cls._normalize_message(payload)}

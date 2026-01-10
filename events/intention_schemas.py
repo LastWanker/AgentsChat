@@ -7,6 +7,7 @@ These dataclasses are intentionally serialization-friendly so they can be
 persisted, inspected, and unit-tested without LLM dependencies.
 """
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -47,6 +48,7 @@ class IntentionDraft:
     def __post_init__(self) -> None:
         if not self.draft_text:
             self.draft_text = self.message_plan
+        self.draft_text = _coerce_text(self.draft_text)
         self.confidence = self._clamp_unit(self.confidence)
         self.motivation = self._clamp_unit(self.motivation)
         self.urgency = self._clamp_unit(self.urgency)
@@ -55,7 +57,9 @@ class IntentionDraft:
     def from_dict(cls, raw: Dict[str, Any]) -> "IntentionDraft":
         return cls(
             kind=raw["kind"],
-            draft_text=raw.get("draft_text", raw.get("text", raw.get("message_plan", ""))),
+            draft_text=_coerce_text(
+                raw.get("draft_text", raw.get("text", raw.get("message_plan", "")))
+            ),
             retrieval_tags=list(raw.get("retrieval_tags", []) or []),
             retrieval_keywords=list(raw.get("retrieval_keywords", []) or []),
             target_scope=raw.get("target_scope"),
@@ -95,6 +99,25 @@ class IntentionDraft:
         except (TypeError, ValueError):
             return 0.0
         return max(0.0, min(1.0, value))
+
+
+def _coerce_text(value: Any) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("{") and text.endswith("}"):
+            try:
+                return _coerce_text(json.loads(text))
+            except json.JSONDecodeError:
+                return text
+        return text
+    if isinstance(value, dict):
+        for key in ("text", "content", "message", "result", "request", "score"):
+            if key in value and value[key] is not None:
+                return _coerce_text(value[key])
+        return json.dumps(value, ensure_ascii=False)
+    if value is None:
+        return ""
+    return str(value)
 
 
 @dataclass

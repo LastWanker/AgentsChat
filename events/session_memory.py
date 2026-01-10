@@ -200,11 +200,11 @@ class SessionMemory:
             if event.sender != agent_id:
                 if event.type in ("request_anyone", "request_specific", "request_all"):
                     if self._should_add_todo(event, agent_id):
-                        summary = self._summarize_event(event)
+                        summary = self._summarize_event_for_tasks(event)
                         table.add_todo(event.sender, event.event_id, summary)
             if event.sender == agent_id:
                 table.move_todos_to_done(event)
-                table.add_done([event.event_id], self._summarize_event(event), memory=False)
+                table.add_done([event.event_id], self._summarize_event_for_tasks(event), memory=False)
                 table.compact_done_list()
             table.save()
 
@@ -246,15 +246,27 @@ class SessionMemory:
             return
         if self.llm_client is None:
             return
+        refs = normalize_references(event.references)
+        if self.llm_mode == "async":
+            updated, refs = self._score_reference_weights_async(event, refs, store)
+        else:
+            updated, refs = self._score_reference_weights_sync(event, refs, store)
+        if updated:
+            event.references = normalize_references(refs)
+            store.update_event(event)
+
+    def _score_reference_weights_sync(
+        self, event: Event, refs: List[Dict[str, Any]], store: Any
+    ) -> tuple[bool, List[Dict[str, Any]]]:
         updated = False
-        new_refs = []
-        for ref in normalize_references(event.references):
+        new_refs: List[Dict[str, Any]] = []
+        for ref in refs:
             ref_event_id = ref.get("event_id")
             ref_event = store.get(ref_event_id) if ref_event_id else None
             if not ref_event:
                 new_refs.append(ref)
                 continue
-            weight = ref.get("weight", {})
+            weight = dict(ref.get("weight", {}) or {})
             for dim in ("dependency", "inspiration", "stance"):
                 score = self._score_dimension(event, ref_event, dim)
                 if score is None:
@@ -263,29 +275,82 @@ class SessionMemory:
                 updated = True
             ref["weight"] = weight
             new_refs.append(ref)
-        if updated:
-            event.references = normalize_references(new_refs)
-            store.update_event(event)
+        return updated, new_refs
+
+    def _score_reference_weights_async(
+        self, event: Event, refs: List[Dict[str, Any]], store: Any
+    ) -> tuple[bool, List[Dict[str, Any]]]:
+        import asyncio
+
+        tasks = []
+        meta: List[tuple[int, str]] = []
+        for idx, ref in enumerate(refs):
+            ref_event_id = ref.get("event_id")
+            ref_event = store.get(ref_event_id) if ref_event_id else None
+            if not ref_event:
+                continue
+            for dim in ("dependency", "inspiration", "stance"):
+                tasks.append(self._score_dimension_async(event, ref_event, dim))
+                meta.append((idx, dim))
+        if not tasks:
+            return False, refs
+        results = asyncio.run(self._gather_scores(tasks))
+        updated = False
+        for (idx, dim), score in zip(meta, results):
+            if score is None:
+                continue
+            weight = dict(refs[idx].get("weight", {}) or {})
+            weight[dim] = score
+            refs[idx]["weight"] = weight
+            updated = True
+        return updated, refs
+
+    async def _gather_scores(self, tasks: List[Any]) -> List[Optional[float]]:
+        import asyncio
+
+        return await asyncio.gather(*tasks)
 
     def _score_dimension(self, event: Event, ref_event: Event, dimension: str) -> Optional[float]:
         rubric = _SCORE_RUBRICS.get(dimension)
         if not rubric:
             return None
-        prompt = (
-            "你是评分器，只输出一个数字。\n"
-            f"维度：{dimension}\n"
-            f"量表：{rubric}\n"
-            "主体事件：" + _stringify_event_content(event) + "\n"
-            "被引用事件：" + _stringify_event_content(ref_event) + "\n"
-            "只输出一个数字。"
-        )
+        relation_hint = _SCORE_RELATIONS.get(dimension, "")
+        prompt = self._score_prompt(event, ref_event, dimension, rubric, relation_hint)
         options = LLMRequestOptions(temperature=0.0, max_tokens=8)
         messages = [{"role": "system", "content": "你是严谨的评分器。"}, {"role": "user", "content": prompt}]
         content = self._complete(messages, options)
-        try:
-            return float(str(content).strip())
-        except (TypeError, ValueError):
+        return _parse_score(content)
+
+    async def _score_dimension_async(
+        self, event: Event, ref_event: Event, dimension: str
+    ) -> Optional[float]:
+        rubric = _SCORE_RUBRICS.get(dimension)
+        if not rubric:
             return None
+        relation_hint = _SCORE_RELATIONS.get(dimension, "")
+        prompt = self._score_prompt(event, ref_event, dimension, rubric, relation_hint)
+        options = LLMRequestOptions(temperature=0.0, max_tokens=8)
+        messages = [{"role": "system", "content": "你是严谨的评分器。"}, {"role": "user", "content": prompt}]
+        content = await self.llm_client.acomplete(messages, options=options)
+        return _parse_score(content)
+
+    def _score_prompt(
+        self,
+        event: Event,
+        ref_event: Event,
+        dimension: str,
+        rubric: str,
+        relation_hint: str,
+    ) -> str:
+        return (
+            "你是评分器，只输出一个数字。\n"
+            f"维度：{dimension}\n"
+            f"关系：{relation_hint}\n"
+            f"量表：{rubric}\n"
+            "主体事件：" + self._brief_event(event) + "\n"
+            "被引用事件：" + self._brief_event(ref_event) + "\n"
+            "只输出一个数字。"
+        )
 
     def _complete(self, messages: List[Dict[str, str]], options: LLMRequestOptions) -> str:
         if self.llm_client is None:
@@ -331,6 +396,22 @@ class SessionMemory:
                     return str(content[key])
         return json.dumps(content, ensure_ascii=False)
 
+    def _summarize_event_for_tasks(self, event: Event) -> str:
+        summary = self._summarize_event(event)
+        summary = self._compact_summary(summary)
+        return f"{event.sender}：{summary}" if summary else str(event.sender)
+
+    @staticmethod
+    def _compact_summary(text: str, max_len: int = 80) -> str:
+        text = str(text).strip()
+        if len(text) <= max_len:
+            return text
+        return text[: max_len - 1] + "…"
+
+    def _brief_event(self, event: Event, max_len: int = 120) -> str:
+        summary = self._compact_summary(self._summarize_event(event), max_len=max_len)
+        return f"{event.type}/{event.sender}:{summary}"
+
 
 _SCORE_RUBRICS = {
     "dependency": (
@@ -348,3 +429,16 @@ _SCORE_RUBRICS = {
         "0.8核心一致,0.9几乎一致,1完全一致"
     ),
 }
+
+_SCORE_RELATIONS = {
+    "dependency": "被引用事件对主体事件的依赖程度",
+    "inspiration": "被引用事件对主体事件的启发程度",
+    "stance": "主体事件对被引用事件的态度",
+}
+
+
+def _parse_score(content: Any) -> Optional[float]:
+    try:
+        return float(str(content).strip())
+    except (TypeError, ValueError):
+        return None
