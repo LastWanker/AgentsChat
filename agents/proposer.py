@@ -10,7 +10,7 @@ from events.intention_schemas import IntentionDraft
 from llm.client import LLMRequestOptions
 from llm.prompts import build_intention_prompt
 from llm.schemas import parse_intention_draft
-from events.tagging import generate_tags
+from events.tagging import generate_tags, generate_tags_with_llm
 from config.roles import role_temperature
 from uuid import uuid4
 
@@ -275,7 +275,14 @@ class IntentionProposer:
             },
             ensure_ascii=False,
         )
-        tags = generate_tags(text=text_blob, fixed_prefix=tag_candidates[:2], max_tags=12)
+        tags = generate_tags_with_llm(
+            text=text_blob,
+            fixed_prefix=tag_candidates[:2],
+            max_tags=12,
+            llm_client=self.llm_client,
+            llm_mode=self.config.llm_mode,
+            tag_pool=context.tag_pool,
+        ) or generate_tags(text=text_blob, fixed_prefix=tag_candidates[:2], max_tags=12)
         keywords = [t for t in tags if t not in tag_candidates][:3]
         tags = [t for t in tags if t in tag_candidates or len(tag_candidates) < 6][:12]
         return tags, keywords

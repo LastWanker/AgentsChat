@@ -6,6 +6,19 @@ from typing import Any, Dict
 from events.intention_schemas import IntentionDraft
 
 
+TAG_GENERATION_SCHEMA: Dict[str, Any] = {
+    "title": "标签生成",
+    "type": "object",
+    "required": ["tags"],
+    "properties": {
+        "tags": {
+            "type": "array",
+            "description": "学科性/方面性/总结性关键词，需短词且不超过 max_tags",
+            "items": {"type": "string"},
+        }
+    },
+}
+
 INTENTION_DRAFT_SCHEMA: Dict[str, Any] = {
     "title": "意向草稿",
     "type": "object",
@@ -91,6 +104,12 @@ def parse_intention_draft(payload: str) -> IntentionDraft:
 
 def parse_intention_final(payload: str) -> Dict[str, Any]:
     """从 LLM 输出里解析 FinalIntention 字典。"""
+
+    return _extract_json(payload)
+
+
+def parse_tag_generation(payload: str) -> Dict[str, Any]:
+    """从 LLM 输出里解析 tags 生成结果。"""
 
     return _extract_json(payload)
 

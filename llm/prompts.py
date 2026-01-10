@@ -4,7 +4,7 @@ import json
 from typing import Any, Dict, List
 
 from config.roles import role_prompt_description
-from llm.schemas import schema_for_phase
+from llm.schemas import TAG_GENERATION_SCHEMA, schema_for_phase
 
 
 def build_intention_prompt(
@@ -78,6 +78,38 @@ def build_intention_prompt(
     user_lines.append("请给出本阶段 JSON 输出。")
     user = "\n".join(user_lines)
 
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+def build_tag_generation_prompt(
+    *,
+    text: str,
+    max_tags: int = 6,
+    fixed_prefix: List[str] | None = None,
+    tag_pool: Dict[str, Any] | None = None,
+) -> List[Dict[str, str]]:
+    system = (
+        "你是标签生成器。输出必须是 JSON，且严格遵守给定 schema。"
+        "标签应是学科性/方面性/总结性关键词，避免寒暄词、口头语、碎片词。"
+        "优先使用短词(2~6字)和高概括词，不要输出标点、语气词或停用词。"
+        "不要输出与内容无关或重复的词。"
+        f"最多 {max_tags} 个标签。"
+        f"schema: {json.dumps(TAG_GENERATION_SCHEMA, ensure_ascii=False)}"
+    )
+    prefix = [t for t in (fixed_prefix or []) if t]
+    user_lines = [
+        "待分析内容：",
+        text,
+        "固定前缀(必须保留)：",
+        json.dumps(prefix, ensure_ascii=False),
+        "现有 tags 池(可参考)：",
+        json.dumps(tag_pool or {}, ensure_ascii=False),
+        "请输出 JSON。",
+    ]
+    user = "\n".join(user_lines)
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user},

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from events.references import default_ref_weight, normalize_references
-from events.tagging import extend_tags, generate_tags
+from events.tagging import extend_tags, generate_tags, generate_tags_with_llm
 from events.types import Event
 from llm.client import LLMRequestOptions
 
@@ -209,20 +209,50 @@ class SessionMemory:
             table.save()
 
     def _update_tags(self, event: Event, store: Any) -> None:
-        if not event.tags:
+        content_text = _stringify_event_content(event)
+        base_prefix = [str(event.sender), "general"]
+        tag_pool_payload = self.tag_pool_payload()
+        updated = False
+
+        llm_tags = generate_tags_with_llm(
+            text=content_text,
+            fixed_prefix=base_prefix,
+            max_tags=6,
+            llm_client=self.llm_client,
+            llm_mode=self.llm_mode,
+            tag_pool=tag_pool_payload,
+        )
+        if llm_tags:
+            if llm_tags != event.tags:
+                event.tags = llm_tags
+                updated = True
+        elif not event.tags:
             event.tags = generate_tags(
-                text=_stringify_event_content(event),
-                fixed_prefix=[str(event.sender), "general"],
+                text=content_text,
+                fixed_prefix=base_prefix,
                 max_tags=6,
             )
-            store.update_event(event)
+            updated = True
+
         if not self.tag_pool.mapping:
-            extra = generate_tags(
-                text=_stringify_event_content(event),
+            extra = generate_tags_with_llm(
+                text=content_text,
                 fixed_prefix=event.tags,
                 max_tags=9,
+                llm_client=self.llm_client,
+                llm_mode=self.llm_mode,
+                tag_pool=tag_pool_payload,
             )
+            if not extra:
+                extra = generate_tags(
+                    text=content_text,
+                    fixed_prefix=event.tags,
+                    max_tags=9,
+                )
             event.tags = extend_tags(event.tags, extra, max_tags=9)
+            updated = True
+
+        if updated:
             store.update_event(event)
         self.tag_pool.update_from_event(event)
         self.tag_pool.save()
@@ -234,7 +264,7 @@ class SessionMemory:
             self.team_board.update(event, summary, kind="boss")
         if len(self.team_board.window_events) >= 6:
             window_ids = list(self.team_board.window_events[:6])
-            window_summary = f"最近 6 条事件总结：{summary}"
+            window_summary = self._summarize_window(window_ids, store) or f"最近 6 条事件总结：{summary}"
             self.team_board.entries.append(
                 {"kind": "window", "summary": window_summary, "event_ids": window_ids}
             )
@@ -389,12 +419,66 @@ class SessionMemory:
         return event_scope == agent_scope
 
     def _summarize_event(self, event: Event) -> str:
+        llm_summary = self._summarize_event_with_llm(event)
+        if llm_summary:
+            return llm_summary
         content = event.content or {}
         if isinstance(content, dict):
             for key in ("text", "result", "request", "score"):
                 if key in content and content[key]:
                     return str(content[key])
         return json.dumps(content, ensure_ascii=False)
+
+    def _summarize_event_with_llm(self, event: Event) -> Optional[str]:
+        if self.llm_client is None:
+            return None
+        prompt = (
+            "请用不超过40字总结事件的核心信息，输出一句话。\n"
+            f"事件类型：{event.type}\n"
+            f"发送者：{event.sender}\n"
+            f"内容：{json.dumps(event.content, ensure_ascii=False)}"
+        )
+        options = LLMRequestOptions(temperature=0.2, max_tokens=64)
+        messages = [
+            {"role": "system", "content": "你是事件摘要器。"},
+            {"role": "user", "content": prompt},
+        ]
+        summary = self._complete(messages, options).strip()
+        if not summary:
+            return None
+        return self._compact_summary(summary)
+
+    def _summarize_window(self, event_ids: List[str], store: Any) -> Optional[str]:
+        if self.llm_client is None:
+            return None
+        events = [store.get(event_id) for event_id in event_ids]
+        payloads = []
+        for ev in events:
+            if not ev:
+                continue
+            payloads.append(
+                {
+                    "event_id": getattr(ev, "event_id", ""),
+                    "type": getattr(ev, "type", ""),
+                    "sender": getattr(ev, "sender", ""),
+                    "content": getattr(ev, "content", {}),
+                }
+            )
+        if not payloads:
+            return None
+        prompt = (
+            "请归纳最近事件的整体进展，不超过60字，输出一句话。\n"
+            f"事件列表：{json.dumps(payloads, ensure_ascii=False)}"
+        )
+        options = LLMRequestOptions(temperature=0.2, max_tokens=80)
+        messages = [
+            {"role": "system", "content": "你是团队进展摘要器。"},
+            {"role": "user", "content": prompt},
+        ]
+        summary = self._complete(messages, options).strip()
+        if not summary:
+            return None
+        return f"最近 6 条事件总结：{self._compact_summary(summary)}"
 
     def _summarize_event_for_tasks(self, event: Event) -> str:
         summary = self._summarize_event(event)

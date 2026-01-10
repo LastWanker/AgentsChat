@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 
 _STOP_TOKENS = {
@@ -73,6 +73,59 @@ def generate_tags(
             continue
         seen.add(token)
         tags.append(token)
+        if len(tags) >= max_tags:
+            break
+    return tags
+
+
+def generate_tags_with_llm(
+    *,
+    text: str,
+    fixed_prefix: Sequence[str] | None = None,
+    max_tags: int = 6,
+    llm_client: Optional[Any] = None,
+    llm_mode: str = "sync",
+    tag_pool: Optional[Dict[str, Any]] = None,
+) -> Optional[List[str]]:
+    if llm_client is None:
+        return None
+    from llm.client import LLMRequestOptions
+    from llm.prompts import build_tag_generation_prompt
+    from llm.schemas import parse_tag_generation
+
+    messages = build_tag_generation_prompt(
+        text=text,
+        max_tags=max_tags,
+        fixed_prefix=list(fixed_prefix or []),
+        tag_pool=tag_pool,
+    )
+    options = LLMRequestOptions(temperature=0.2, max_tokens=96)
+    if llm_mode == "async":
+        import asyncio
+
+        content = asyncio.run(llm_client.acomplete(messages, options=options))
+    elif llm_mode == "stream":
+        content = "".join(llm_client.stream(messages, options=options))
+    else:
+        content = llm_client.complete(messages, options=options)
+    try:
+        data = parse_tag_generation(content)
+    except Exception:
+        return None
+    raw_tags = data.get("tags") if isinstance(data, dict) else None
+    if not raw_tags:
+        return None
+    fixed = [str(t) for t in (fixed_prefix or []) if t]
+    seen = set()
+    tags: List[str] = []
+    for tag in fixed + list(raw_tags):
+        if not tag:
+            continue
+        key = str(tag).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tags.append(str(tag))
         if len(tags) >= max_tags:
             break
     return tags
