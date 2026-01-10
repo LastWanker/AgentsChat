@@ -24,6 +24,7 @@ def role_prompt_description(role: Optional[str]) -> str:
         f"生理维度：{profile.get('physiology', '')}",
         f"心理维度：{profile.get('psychology', '')}",
         f"角色背景：{profile.get('background', '')}",
+        f"知识卡：{profile.get('knowledge_card', '')}",
         f"语言语气：{profile.get('tone', '')}",
         f"擅长：{', '.join(profile.get('strengths', []) or [])}",
     ]
