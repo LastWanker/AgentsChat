@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from events.references import ref_event_id
 from events.store import EventStore
-from events.types import Event, new_event
+from events.types import Event
+from events.session_memory import SessionMemory
 
 
 class RequestCompletionObserver:
@@ -13,16 +13,22 @@ class RequestCompletionObserver:
 
     一旦判定完成，会：
     - 更新原 request 事件的 completed 标记
-    - 生成一条 speak_public 事件，引用所有完成该 request 的 submit
+    - 更新 team_board 记录完成摘要
     """
 
     id = "request_completion_observer"
     scope = "public"
 
-    def __init__(self, *, store: EventStore, world, agents: List):
+    def __init__(
+        self,
+        *,
+        store: EventStore,
+        agents: List,
+        memory: Optional[SessionMemory] = None,
+    ):
         self.store = store
-        self.world = world
         self.agents = agents
+        self.memory = memory
 
     # ===== Observer 接口 =====
     def on_event(self, event: dict):
@@ -67,7 +73,7 @@ class RequestCompletionObserver:
             return
 
         self.store.mark_completed(request.event_id)
-        self._emit_completion_announcement(request, submits)
+        self._record_completion(request, submits)
 
     # ===== 判定子逻辑 =====
     def _submits_referencing(self, request_id: str) -> List[Event]:
@@ -110,24 +116,25 @@ class RequestCompletionObserver:
         return True
 
     # ===== 完成后的广播 =====
-    def _emit_completion_announcement(self, request: Event, submits: List[Event]) -> None:
+    def _record_completion(self, request: Event, submits: List[Event]) -> None:
         submit_ids = [ev.event_id for ev in submits]
         summary = self._summarize_submit_stances(request, submits)
         text = (
             f"{request.type} {request.event_id} 已被提交完成（{len(submit_ids)} 次 submit）。{summary}"
         )
-        completion_event = new_event(
-            sender=self.id,
-            type="speak_public",
-            scope="public",
-            content={"text": text},
-            references=submit_ids,
-            completed=True,
+        if self.memory is None:
+            print(
+                "[platform/request_tracker.py] ℹ️ 未配置 SessionMemory，跳过 team_board 更新。"
+            )
+            return
+        event_ids = [request.event_id, *submit_ids]
+        self.memory.add_team_board_entry(
+            summary=text,
+            event_ids=event_ids,
+            kind="request_completion",
         )
-        self.store.append(completion_event)
-        self.world.emit(asdict(completion_event))
         print(
-            f"[platform/request_tracker.py] 🎉 request {request.event_id} 已闭合，发布 completion speak_public。"
+            f"[platform/request_tracker.py] 🎉 request {request.event_id} 已闭合，更新 team_board。"
         )
 
     def _summarize_submit_stances(self, request: Event, submits: List[Event]) -> str:

@@ -216,6 +216,20 @@ class SessionMemory:
     def team_board_payload(self) -> List[Dict[str, Any]]:
         return list(self.team_board.entries)
 
+    def add_team_board_entry(
+        self,
+        *,
+        summary: str,
+        event_ids: Iterable[str],
+        kind: str = "request_completion",
+    ) -> None:
+        cleaned_ids = [event_id for event_id in event_ids if event_id]
+        with self._team_board_lock:
+            self.team_board.entries.append(
+                {"kind": kind, "summary": summary, "event_ids": cleaned_ids}
+            )
+            self.team_board.save()
+
     def _start_maintenance_loop(self) -> None:
         if self._maintenance_loop is not None:
             return

@@ -261,9 +261,9 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     print("[runtime/bootstrap.py] 🛰️ AgentController 也开始观察世界事件。")
     # === 插线：Request 完成监控（生成闭环声明） ===
     world.add_observer(
-        RequestCompletionObserver(store=store, world=world, agents=cfg.agents)
+        RequestCompletionObserver(store=store, agents=cfg.agents, memory=memory)
     )
-    print("[runtime/bootstrap.py] ✅ RequestCompletionObserver 启用，负责宣告请求完成。")
+    print("[runtime/bootstrap.py] ✅ RequestCompletionObserver 启用，负责记录请求完成。")
     world.add_observer(SessionMaintenanceObserver(memory=memory, store=store))
     print("[runtime/bootstrap.py] 🧹 SessionMaintenanceObserver 启用，负责事后维护。")
 
