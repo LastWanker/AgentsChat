@@ -15,12 +15,12 @@ class EventQuery:
     def by_id(self, ref_or_id: Reference | str) -> Optional[Event]:
         return self.store.get(ref_event_id(ref_or_id))
 
-    def last_n(self, n: int = 10) -> List[Event]:
+    def last_n(self, n: int = 6) -> List[Event]:
         evs = self.store.all()
         return evs[-n:]
 
     # --- resolver-friendly helpers ---
-    def recent(self, scope: str, n: int = 10) -> List[Event]:
+    def recent(self, scope: str, n: int = 6) -> List[Event]:
         """Return the most recent events in a scope."""
 
         scoped_events = [ev for ev in self.store.all() if ev.scope == scope]
