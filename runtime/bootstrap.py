@@ -122,8 +122,9 @@ def _normalize_seed_event(seed: Any) -> Event:
         )
         try:
             normalized = normalize_event_dict(seed)
+            normalized_event_id = normalized.get("event_id") or next_event_id()
             ev = Event(
-                event_id=normalized.get("event_id", next_event_id()),
+                event_id=normalized_event_id,
                 type=normalized["type"],
                 sender=normalized["sender"],
                 sender_name=normalized.get("sender_name", ""),
@@ -245,13 +246,18 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     # === 注入 seed events（Boss 或测试用）===
     if cfg.seed_events:
         first_seed: Event | None = None
+        seed_senders: list[str] = []
         for e in cfg.seed_events:
             ev = _normalize_seed_event(e)
             store.append(ev)
             world.emit(ev)
             if first_seed is None:
                 first_seed = ev
+            if ev.sender is not None:
+                seed_senders.append(str(ev.sender))
         store.sync_event_id_counter_from_store()
+        if seed_senders:
+            scheduler.mark_seed_speakers(seed_senders, loop_tick=0)
         print(f"[runtime/bootstrap.py] 🌱 预置种子事件 {len(cfg.seed_events)} 条已注入世界。")
     else:
         print("[runtime/bootstrap.py] 🌱 没有预置种子事件，等待运行时自然生成。")
