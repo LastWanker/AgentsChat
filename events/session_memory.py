@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from events.references import default_ref_weight, normalize_references
+from events.references import normalize_references
 from events.tagging import (
     extend_tags,
     generate_tags,
@@ -286,12 +286,14 @@ class SessionMemory:
             self._update_personal_tasks_async(event),
             self._update_tags_async(event, store),
             self._update_team_board_async(event, store),
+            asyncio.to_thread(self._update_reference_weights, event, store),
         )
 
     def _run_maintenance_sync(self, event: Event, store: Any) -> None:
         self._update_personal_tasks(event)
         self._update_tags(event, store)
         self._update_team_board(event, store)
+        self._update_reference_weights(event, store)
 
     def wait_for_maintenance(self, timeout: Optional[float] = None) -> bool:
         if not self._maintenance_loop or not self._maintenance_queue:
@@ -554,6 +556,15 @@ class SessionMemory:
                     {"kind": "window", "summary": window_summary, "event_ids": window_ids}
                 )
                 self.team_board.save()
+
+    def _update_reference_weights(self, event: Event, store: Any) -> None:
+        if not event.references:
+            return
+        normalized = normalize_references(event.references)
+        if normalized == event.references:
+            return
+        event.references = normalized
+        store.update_event(event)
 
     async def _update_team_board_async(self, event: Event, store: Any) -> None:
         summary = await self._summarize_event_async(event)
