@@ -8,11 +8,31 @@ from typing import Any, Dict, Optional
 _ROLES_DIR = Path(__file__).resolve().parent / "roles"
 
 
+def _resolve_role_path(role: Optional[str]) -> Path:
+    if not role:
+        return _ROLES_DIR / "default.json"
+
+    role_key = str(role).strip()
+    direct_path = _ROLES_DIR / f"{role_key}.json"
+    if direct_path.exists():
+        return direct_path
+
+    lower_key = role_key.lower()
+    lower_path = _ROLES_DIR / f"{lower_key}.json"
+    if lower_path.exists():
+        return lower_path
+
+    for candidate in _ROLES_DIR.iterdir():
+        if candidate.suffix != ".json":
+            continue
+        if candidate.stem.lower() == lower_key:
+            return candidate
+
+    return _ROLES_DIR / "default.json"
+
+
 def load_role_profile(role: Optional[str]) -> Dict[str, Any]:
-    role_key = (role or "default").lower()
-    path = _ROLES_DIR / f"{role_key}.json"
-    if not path.exists():
-        path = _ROLES_DIR / "default.json"
+    path = _resolve_role_path(role)
     data = json.loads(path.read_text(encoding="utf-8"))
     data.setdefault("temperature", 1.0)
     return data
