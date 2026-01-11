@@ -16,7 +16,7 @@ from agents.interpreter import IntentInterpreter
 from agents.agent import Agent
 from events.id_generator import next_event_id
 from events.store import EventStore
-from events.types import Event
+from events.types import Event, normalize_event_dict
 from events.references import normalize_references
 from events.intention_finalizer import IntentionFinalizer, FinalizerConfig
 from events.query import EventQuery
@@ -121,16 +121,18 @@ def _normalize_seed_event(seed: Any) -> Event:
             seed,
         )
         try:
+            normalized = normalize_event_dict(seed)
             ev = Event(
-                event_id=seed.get("event_id", next_event_id()),
-                type=seed["type"],
-                timestamp=seed.get("timestamp", datetime.now(UTC).isoformat()),
-                sender=seed["sender"],
-                content=seed.get("content", {}),
-                references=normalize_references(seed.get("references", [])),
-                tags=seed.get("tags", []),
-                recipients=seed.get("recipients", []),
-                metadata=seed.get("metadata", {}),
+                event_id=normalized.get("event_id", next_event_id()),
+                type=normalized["type"],
+                sender=normalized["sender"],
+                sender_name=normalized.get("sender_name", ""),
+                sender_role=normalized.get("sender_role", ""),
+                content=normalized.get("content", {}),
+                references=normalize_references(normalized.get("references", [])),
+                tags=normalized.get("tags", []),
+                metadata=normalized.get("metadata", {}),
+                timestamp=normalized.get("timestamp", datetime.now(UTC).isoformat()),
             )
             print(
                 "[runtime/bootstrap.py] ✅ 规范化完成，生成 Event：",
@@ -249,6 +251,7 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
             world.emit(ev)
             if first_seed is None:
                 first_seed = ev
+        store.sync_event_id_counter_from_store()
         print(f"[runtime/bootstrap.py] 🌱 预置种子事件 {len(cfg.seed_events)} 条已注入世界。")
     else:
         print("[runtime/bootstrap.py] 🌱 没有预置种子事件，等待运行时自然生成。")

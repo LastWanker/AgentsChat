@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from .id_generator import sync_event_id_counter
 from .references import normalize_references
-from .types import Event
+from .types import Event, normalize_event_dict
 
 
 class EventStore:
@@ -108,6 +108,9 @@ class EventStore:
             self._events_cache = self._load_all_events()
         return list(self._events_cache)
 
+    def sync_event_id_counter_from_store(self) -> None:
+        self._sync_event_id_counter_from_index()
+
     # ---------- persistence helpers ----------
     @staticmethod
     def _generate_session_id() -> str:
@@ -161,7 +164,7 @@ class EventStore:
             )
             return None
         data = json.loads(raw.decode("utf-8"))
-        return Event(**data)
+        return Event(**normalize_event_dict(data))
 
     def _load_all_events(self) -> List[Event]:
         events: List[Event] = []
@@ -176,7 +179,8 @@ class EventStore:
                 if not line:
                     break
                 try:
-                    event = Event(**json.loads(line.decode("utf-8")))
+                    raw_event = json.loads(line.decode("utf-8"))
+                    event = Event(**normalize_event_dict(raw_event))
                 except Exception as exc:
                     print(
                         f"[events/store.py] ⚠️ 无法解析 offset={offset} 的事件：{type(exc).__name__}:{exc}，已跳过。"

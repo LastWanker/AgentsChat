@@ -102,6 +102,8 @@ def _coerce_text(value: Any) -> str:
                 return text
         return text
     if isinstance(value, dict):
+        if set(value.keys()) == {"tags"}:
+            return ""
         for key in ("text", "content", "message"):
             if key in value and value[key] is not None:
                 return _coerce_text(value[key])

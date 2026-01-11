@@ -105,27 +105,23 @@ class Agent:
             event_type: str,
             content: Dict[str, Any],
             *,  # *,表示一个分隔符，它强制后续的参数必须通过关键字参数（keyword arguments）的方式传递，而不能通过位置参数（positional arguments）传递。
-            recipients: Optional[List[str]] = None,
             # references: Optional[List[str]] = None,
             references: Optional[List[Reference | str]] = None,
             metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
 
         metadata = metadata or {}
-        metadata.setdefault("sender_name", self.name)
-        metadata.setdefault("sender_role", self.role)
 
         event = {
             "event_id": next_event_id(),
             "type": event_type,
-            "timestamp": datetime.now(UTC).isoformat(),
             "sender": self.id,
-
-            "recipients": recipients or [],
-
+            "sender_name": self.name,
+            "sender_role": self.role,
             "content": content,
             "references": self._normalize_references(references),
-            "metadata": metadata,  # or {},
+            "metadata": metadata,
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # Agent 只负责“我做过什么”，不负责“全局发生了什么”。 # 新的变更！统一 memory 的写入口：只允许 observe 写

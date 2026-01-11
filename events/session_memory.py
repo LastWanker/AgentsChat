@@ -23,8 +23,8 @@ from llm.client import LLMRequestOptions
 
 def _stringify_event_content(event: Event) -> str:
     metadata = event.metadata or {}
-    sender_name = metadata.get("sender_name") or metadata.get("name")
-    sender_role = metadata.get("sender_role") or metadata.get("role")
+    sender_name = event.sender_name or metadata.get("sender_name") or metadata.get("name")
+    sender_role = event.sender_role or metadata.get("sender_role") or metadata.get("role")
     parts = [
         str(event.type),
         str(event.sender),
@@ -137,7 +137,23 @@ class TagPool:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.mapping, ensure_ascii=False, indent=2), encoding="utf-8")
+        lines = ["{"]
+        items = list(self.mapping.items())
+        for idx, (tag, data) in enumerate(items):
+            hit_count = 0
+            event_ids: List[str] = []
+            if isinstance(data, dict):
+                hit_count = int(data.get("hit_count") or 0)
+                event_ids = list(data.get("event_ids", []) or [])
+            else:
+                event_ids = list(data or [])
+            payload = {"hit_count": hit_count, "event_ids": event_ids}
+            line = f"  {json.dumps(str(tag), ensure_ascii=False)}: {json.dumps(payload, ensure_ascii=False, separators=(', ', ': '))}"
+            if idx < len(items) - 1:
+                line += ","
+            lines.append(line)
+        lines.append("}")
+        self.path.write_text("\n".join(lines), encoding="utf-8")
 
     def update_from_event(self, event: Event) -> None:
         for tag in event.tags:
@@ -907,8 +923,8 @@ class SessionMemory:
     def _format_sender_label(event: Event) -> str:
         metadata = event.metadata or {}
         sender_id = str(event.sender or "")
-        sender_name = metadata.get("sender_name") or metadata.get("name")
-        sender_role = metadata.get("sender_role") or metadata.get("role")
+        sender_name = event.sender_name or metadata.get("sender_name") or metadata.get("name")
+        sender_role = event.sender_role or metadata.get("sender_role") or metadata.get("role")
         parts = [sender_id, sender_name, sender_role]
         return ", ".join(str(part) for part in parts if part)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from events.session_memory import SessionMemory
-from events.types import Event
+from events.types import Event, normalize_event_dict
 
 
 class SessionMaintenanceObserver:
@@ -17,7 +17,7 @@ class SessionMaintenanceObserver:
             ev = event
         else:
             try:
-                ev = Event(**event)
+                ev = Event(**normalize_event_dict(event))
             except Exception:
                 return
         self.memory.handle_event(ev, self.store)

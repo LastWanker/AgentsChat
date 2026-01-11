@@ -157,8 +157,16 @@ class AgentController:
     def _event_corpus_payload(event: Dict[str, Any]) -> Dict[str, Any]:
         metadata = event.get("metadata") or {}
         sender_id = str(event.get("sender", ""))
-        sender_name = metadata.get("sender_name") or metadata.get("name") or event.get("sender_name")
-        sender_role = metadata.get("sender_role") or metadata.get("role") or event.get("sender_role")
+        sender_name = (
+            event.get("sender_name")
+            or metadata.get("sender_name")
+            or metadata.get("name")
+        )
+        sender_role = (
+            event.get("sender_role")
+            or metadata.get("sender_role")
+            or metadata.get("role")
+        )
         sender_parts = [sender_id, sender_name, sender_role]
         sender_label = ", ".join(str(part) for part in sender_parts if part)
         content = event.get("content") or event.get("payload") or {}

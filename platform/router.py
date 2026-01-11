@@ -62,8 +62,9 @@ class Router:
             content=intention.payload,
             references=intention.references,
             tags=intention.tags,
+            sender_name=getattr(agent, "name", ""),
+            sender_role=getattr(agent, "role", ""),
             metadata={
-                "sender_name": getattr(agent, "name", ""),
-                "sender_role": getattr(agent, "role", ""),
+                "agent_expertise": getattr(agent, "expertise", []),
             },
         )
