@@ -11,9 +11,10 @@ from typing import Any, Dict, Iterable, List, Optional
 from events.references import normalize_references
 from events.tagging import (
     extend_tags,
+    generate_extra_tags_with_llm,
+    generate_extra_tags_with_llm_async,
     generate_tags,
     generate_tags_with_llm,
-    generate_tags_with_llm_async,
 )
 from events.types import Event
 from llm.client import LLMRequestOptions
@@ -199,7 +200,6 @@ class SessionMemory:
         self._maintenance_queue: Optional[asyncio.Queue] = None
         self._maintenance_thread: Optional[threading.Thread] = None
         self._llm_semaphore: Optional[asyncio.Semaphore] = None
-        self._tag_pool_seeded = False
         self._maintenance_stopping = False
         self._personal_task_locks: Dict[str, threading.Lock] = {}
         self._tag_pool_lock = threading.Lock()
@@ -212,6 +212,39 @@ class SessionMemory:
 
     def tag_pool_payload(self) -> Dict[str, Any]:
         return {"tags": self.tag_pool.list_tags(), "index": self.tag_pool.mapping}
+
+    def seed_tag_pool_from_event(self, event: Event, store: Any) -> None:
+        if self.tag_pool.mapping:
+            return
+        content_text = _stringify_event_content(event)
+        updated = False
+        if not event.tags:
+            event.tags = generate_tags_with_llm(
+                text=content_text,
+                max_tags=6,
+                llm_client=self.llm_client,
+                llm_mode=self.llm_mode,
+            ) or generate_tags(text=content_text, max_tags=6)
+            updated = True
+        event.tags = self._normalize_selected_tags(event.tags)
+        if updated:
+            store.update_event(event)
+        with self._tag_pool_lock:
+            self.tag_pool.update_from_event(event)
+            self.tag_pool.save()
+        extra_tags = generate_extra_tags_with_llm(
+            text=content_text,
+            existing_tags=event.tags,
+            max_new_tags=3,
+            llm_client=self.llm_client,
+            llm_mode=self.llm_mode,
+        )
+        if extra_tags:
+            event.tags = extend_tags(event.tags, extra_tags, max_tags=12)
+            store.update_event(event)
+            with self._tag_pool_lock:
+                self.tag_pool.update_from_event(event)
+                self.tag_pool.save()
 
     def team_board_payload(self) -> List[Dict[str, Any]]:
         return list(self.team_board.entries)
@@ -412,47 +445,10 @@ class SessionMemory:
 
     def _update_tags(self, event: Event, store: Any) -> None:
         content_text = _stringify_event_content(event)
-        base_prefix = [str(event.sender), "general"]
-        tag_pool_payload = self.tag_pool_payload()
         updated = False
-
-        llm_tags = generate_tags_with_llm(
-            text=content_text,
-            fixed_prefix=base_prefix,
-            max_tags=6,
-            llm_client=self.llm_client,
-            llm_mode=self.llm_mode,
-            tag_pool=tag_pool_payload,
-        )
-        if llm_tags:
-            if llm_tags != event.tags:
-                event.tags = llm_tags
-                updated = True
-        elif not event.tags:
-            event.tags = generate_tags(
-                text=content_text,
-                fixed_prefix=base_prefix,
-                max_tags=6,
-            )
-            updated = True
-
-        if not self.tag_pool.mapping and not self._tag_pool_seeded:
-            self._tag_pool_seeded = True
-            extra = generate_tags_with_llm(
-                text=content_text,
-                fixed_prefix=event.tags,
-                max_tags=9,
-                llm_client=self.llm_client,
-                llm_mode=self.llm_mode,
-                tag_pool=tag_pool_payload,
-            )
-            if not extra:
-                extra = generate_tags(
-                    text=content_text,
-                    fixed_prefix=event.tags,
-                    max_tags=9,
-                )
-            event.tags = extend_tags(event.tags, extra, max_tags=9)
+        normalized = self._normalize_selected_tags(event.tags)
+        if normalized != event.tags:
+            event.tags = normalized
             updated = True
 
         with self._tag_pool_lock:
@@ -460,76 +456,27 @@ class SessionMemory:
                 store.update_event(event)
             self.tag_pool.update_from_event(event)
             self.tag_pool.save()
+
+        extra_tags = generate_extra_tags_with_llm(
+            text=content_text,
+            existing_tags=event.tags,
+            max_new_tags=3,
+            llm_client=self.llm_client,
+            llm_mode=self.llm_mode,
+        )
+        if extra_tags:
+            event.tags = extend_tags(event.tags, extra_tags, max_tags=12)
+            with self._tag_pool_lock:
+                store.update_event(event)
+                self.tag_pool.update_from_event(event)
+                self.tag_pool.save()
 
     async def _update_tags_async(self, event: Event, store: Any) -> None:
         content_text = _stringify_event_content(event)
-        base_prefix = [str(event.sender), "general"]
-        tag_pool_payload = self.tag_pool_payload()
         updated = False
-
-        llm_tags = None
-        if self.llm_client is not None:
-            if self.llm_mode == "async":
-                llm_tags = await generate_tags_with_llm_async(
-                    text=content_text,
-                    fixed_prefix=base_prefix,
-                    max_tags=6,
-                    llm_client=self.llm_client,
-                    tag_pool=tag_pool_payload,
-                    semaphore=self._llm_semaphore,
-                )
-            else:
-                llm_tags = await asyncio.to_thread(
-                    generate_tags_with_llm,
-                    text=content_text,
-                    fixed_prefix=base_prefix,
-                    max_tags=6,
-                    llm_client=self.llm_client,
-                    llm_mode=self.llm_mode,
-                    tag_pool=tag_pool_payload,
-                )
-        if llm_tags:
-            if llm_tags != event.tags:
-                event.tags = llm_tags
-                updated = True
-        elif not event.tags:
-            event.tags = generate_tags(
-                text=content_text,
-                fixed_prefix=base_prefix,
-                max_tags=6,
-            )
-            updated = True
-
-        if not self.tag_pool.mapping and not self._tag_pool_seeded:
-            self._tag_pool_seeded = True
-            extra = None
-            if self.llm_client is not None:
-                if self.llm_mode == "async":
-                    extra = await generate_tags_with_llm_async(
-                        text=content_text,
-                        fixed_prefix=event.tags,
-                        max_tags=9,
-                        llm_client=self.llm_client,
-                        tag_pool=tag_pool_payload,
-                        semaphore=self._llm_semaphore,
-                    )
-                else:
-                    extra = await asyncio.to_thread(
-                        generate_tags_with_llm,
-                        text=content_text,
-                        fixed_prefix=event.tags,
-                        max_tags=9,
-                        llm_client=self.llm_client,
-                        llm_mode=self.llm_mode,
-                        tag_pool=tag_pool_payload,
-                    )
-            if not extra:
-                extra = generate_tags(
-                    text=content_text,
-                    fixed_prefix=event.tags,
-                    max_tags=9,
-                )
-            event.tags = extend_tags(event.tags, extra, max_tags=9)
+        normalized = self._normalize_selected_tags(event.tags)
+        if normalized != event.tags:
+            event.tags = normalized
             updated = True
 
         with self._tag_pool_lock:
@@ -537,6 +484,46 @@ class SessionMemory:
                 store.update_event(event)
             self.tag_pool.update_from_event(event)
             self.tag_pool.save()
+
+        extra_tags: List[str] = []
+        if self.llm_client is not None:
+            extra_tags = await generate_extra_tags_with_llm_async(
+                text=content_text,
+                existing_tags=event.tags,
+                max_new_tags=3,
+                llm_client=self.llm_client,
+                semaphore=self._llm_semaphore,
+            )
+        else:
+            extra_tags = generate_extra_tags_with_llm(
+                text=content_text,
+                existing_tags=event.tags,
+                max_new_tags=3,
+                llm_client=None,
+                llm_mode=self.llm_mode,
+            )
+        if extra_tags:
+            event.tags = extend_tags(event.tags, extra_tags, max_tags=12)
+            with self._tag_pool_lock:
+                store.update_event(event)
+                self.tag_pool.update_from_event(event)
+                self.tag_pool.save()
+
+    @staticmethod
+    def _normalize_selected_tags(tags: Iterable[str], max_tags: int = 9) -> List[str]:
+        normalized: List[str] = []
+        seen = set()
+        for tag in tags or []:
+            if not tag:
+                continue
+            key = str(tag).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(str(tag))
+            if len(normalized) >= max_tags:
+                break
+        return normalized
 
     def _update_team_board(self, event: Event, store: Any) -> None:
         summary = self._summarize_event(event)

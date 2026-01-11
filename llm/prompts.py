@@ -31,7 +31,7 @@ def build_intention_prompt(
         "draft 阶段的 draft_text 表示你打算对群里说的草稿内容。"
         "finalize 阶段必须生成面向其他成员的最终成文内容，不要输出“我打算做什么”。"
         "draft 阶段必须提供意愿三维：confidence(了解程度)、motivation(兴趣/意愿)、urgency(自我信息重要性)，范围 0~1。"
-        "draft 阶段需要输出 6~12 个 retrieval_tags，可适度补充 retrieval_keywords。"
+        "draft 阶段 retrieval_tags 只能从 tags 池里选择，宁缺毋滥，推荐 3~6 个，最多 9 个，可为空。"
         "finalize 阶段 references 将由系统自动填充，weight 采用默认值。"
         "kind 的选择必须与 draft_text 保持一致："
         "你打算说话就用 speak。"
@@ -58,7 +58,7 @@ def build_intention_prompt(
         json.dumps(referenced_events or [], ensure_ascii=False),
         "个人事务表（可参考）：",
         json.dumps(personal_tasks or {}, ensure_ascii=False),
-        "tags 池（可参考）：",
+        "tags 池（仅关键词列表，可参考）：",
         json.dumps(tag_pool or {}, ensure_ascii=False),
         "TeamBoard（可参考）：",
         json.dumps(team_board or [], ensure_ascii=False),
@@ -113,29 +113,27 @@ def build_tag_generation_prompt(
     ]
 
 
-def build_tag_generation_prompt(
+def build_tag_enrichment_prompt(
     *,
     text: str,
-    max_tags: int = 6,
-    fixed_prefix: List[str] | None = None,
-    tag_pool: Dict[str, Any] | None = None,
+    existing_tags: List[str] | None = None,
+    max_tags: int = 3,
 ) -> List[Dict[str, str]]:
     system = (
-        "你是标签生成器。输出必须是 JSON，且严格遵守给定 schema。"
+        "你是标签补充器。输出必须是 JSON，且严格遵守给定 schema。"
         "标签应是学科性/方面性/总结性关键词，避免寒暄词、口头语、碎片词。"
         "优先使用短词(2~6字)和高概括词，不要输出标点、语气词或停用词。"
-        "不要输出与内容无关或重复的词。"
-        f"最多 {max_tags} 个标签。"
+        "必须从不同角度提炼新特征，不能重复已有 tags。"
+        f"最多 {max_tags} 个新标签。"
         f"schema: {json.dumps(TAG_GENERATION_SCHEMA, ensure_ascii=False)}"
     )
-    prefix = [t for t in (fixed_prefix or []) if t]
+    prefix = [t for t in (existing_tags or []) if t]
+    prefix_payload = json.dumps(prefix, ensure_ascii=False) if prefix else "NULL"
     user_lines = [
         "待分析内容：",
         text,
-        "固定前缀(必须保留)：",
-        json.dumps(prefix, ensure_ascii=False),
-        "现有 tags 池(可参考)：",
-        json.dumps(tag_pool or {}, ensure_ascii=False),
+        "已有 tags（不得重复，若为空则为 NULL）：",
+        prefix_payload,
         "请输出 JSON。",
     ]
     user = "\n".join(user_lines)

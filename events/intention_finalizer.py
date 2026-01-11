@@ -9,7 +9,6 @@ from events.intention_schemas import FinalIntention, IntentionDraft
 from events.types import Intention, Reference
 from events.reference_resolver import ReferenceResolver
 from events.references import default_ref_weight
-from events.tagging import generate_tags
 from config.roles import role_temperature
 from llm.client import LLMRequestOptions
 from llm.prompts import build_intention_prompt
@@ -55,11 +54,13 @@ class IntentionFinalizer:
                 kind=draft.kind,
                 payload=self._payload_for_kind(draft),
                 references=weighted_refs,
-                tags=self._default_tags(draft),
+                tags=self._normalize_draft_tags(draft.retrieval_tags),
                 confidence=draft.confidence,
                 motivation=draft.motivation,
                 urgency=draft.urgency,
             )
+        else:
+            final.tags = self._normalize_draft_tags(draft.retrieval_tags)
 
         return final.to_intention(
             agent_id=agent_id,
@@ -134,7 +135,7 @@ class IntentionFinalizer:
         final = FinalIntention.from_dict(data)
         final.payload = self._normalize_payload(final.kind, final.payload)
         final.references = self._apply_weight_defaults(candidate_refs)
-        final.tags = final.tags or self._default_tags(draft)
+        final.tags = self._normalize_draft_tags(draft.retrieval_tags)
         final.confidence = draft.confidence
         final.motivation = draft.motivation
         final.urgency = draft.urgency
@@ -178,15 +179,20 @@ class IntentionFinalizer:
         return weighted
 
     @staticmethod
-    def _default_tags(draft: IntentionDraft) -> List[str]:
-        base_text = draft.draft_text or draft.message_plan
-        domain = (draft.agent_expertise or [])
-        fixed = [
-            str(draft.agent_name or draft.agent_id or "agent"),
-            str(domain[0] if domain else draft.agent_role or "general"),
-        ]
-
-        return generate_tags(text=base_text, fixed_prefix=fixed, max_tags=6)
+    def _normalize_draft_tags(tags: List[str], max_tags: int = 9) -> List[str]:
+        seen = set()
+        normalized: List[str] = []
+        for tag in tags or []:
+            if not tag:
+                continue
+            key = str(tag).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(str(tag))
+            if len(normalized) >= max_tags:
+                break
+        return normalized
 
     @staticmethod
     def _normalize_message(value: Any) -> str:

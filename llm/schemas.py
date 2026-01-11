@@ -35,12 +35,7 @@ INTENTION_DRAFT_SCHEMA: Dict[str, Any] = {
         "draft_text": {"type": "string", "description": "面向群内其他成员的草稿文本（我打算说/提交的内容）"},
         "retrieval_tags": {
             "type": "array",
-            "description": "用于索引的 tags（优先从 tags 池选取，建议 6~12 个）",
-            "items": {"type": "string"},
-        },
-        "retrieval_keywords": {
-            "type": "array",
-            "description": "不在 tags 池中的额外关键词，将进行全文检索",
+            "description": "用于索引的 tags（只能从 tags 池中选择，建议 3~6 个，最多 9 个，可为空）",
             "items": {"type": "string"},
         },
         "confidence": {"type": "number", "description": "对主题了解程度(0~1)"},
@@ -58,7 +53,7 @@ INTENTION_FINAL_SCHEMA: Dict[str, Any] = {
         "payload": {"type": "object"},
         "tags": {
             "type": "array",
-            "description": "事件 tags（不超过 6 个，前两个固定为 agent 标签）",
+            "description": "事件 tags（来自 draft 阶段选择的 tags，最多 12 个）",
             "items": {"type": "string"},
         },
         "references": {

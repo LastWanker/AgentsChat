@@ -99,10 +99,9 @@ def test_reference_resolver_builds_candidates(tmp_path):
         kind="speak",
         draft_text="回应讨论",
         retrieval_tags=[],
-        retrieval_keywords=["讨论"],
         agent_count=2,
     )
 
     references = resolver.resolve(draft)
 
-    assert {ref["event_id"] for ref in references} == {"e1", "e2", "e4"}
+    assert references == []

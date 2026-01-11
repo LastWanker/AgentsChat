@@ -10,7 +10,7 @@ from events.intention_schemas import IntentionDraft
 from llm.client import LLMRequestOptions
 from llm.prompts import build_intention_prompt
 from llm.schemas import parse_intention_draft
-from events.tagging import generate_tags, generate_tags_with_llm
+from events.tagging import generate_tags
 from config.roles import role_temperature
 from uuid import uuid4
 
@@ -110,7 +110,7 @@ class IntentionProposer:
         intentions: List[IntentionDraft] = []
         hints = ProposerHints()
         confidence, motivation, urgency = self._default_intent_scores(etype, context)
-        retrieval_tags, retrieval_keywords = self._build_retrieval_inputs(context)
+        retrieval_tags = self._build_retrieval_inputs(context)
 
         if self.config.allow_speak_replies:
             intentions.append(
@@ -120,7 +120,6 @@ class IntentionProposer:
                     kind="speak",
                     draft_text=self._simple_discussion_reply(payload.get("text")),
                     retrieval_tags=retrieval_tags,
-                    retrieval_keywords=retrieval_keywords,
                     agent_role=context.agent_role,
                     agent_count=context.agent_count,
                     agent_name=context.agent_name,
@@ -139,7 +138,6 @@ class IntentionProposer:
                     kind="speak",
                     draft_text="收到事件，暂时没有补充。",
                     retrieval_tags=retrieval_tags,
-                    retrieval_keywords=retrieval_keywords,
                     agent_role=context.agent_role,
                     agent_count=context.agent_count,
                     agent_name=context.agent_name,
@@ -200,7 +198,9 @@ class IntentionProposer:
             return self._propose_with_rules(context)
 
         if not draft.retrieval_tags:
-            draft.retrieval_tags, draft.retrieval_keywords = self._build_retrieval_inputs(context)
+            draft.retrieval_tags = self._build_retrieval_inputs(context)
+        else:
+            draft.retrieval_tags = self._filter_tags_from_pool(draft.retrieval_tags, context)
         draft.agent_role = context.agent_role
         draft.agent_count = context.agent_count
         draft.agent_name = context.agent_name
@@ -234,24 +234,64 @@ class IntentionProposer:
 
     def _build_retrieval_inputs(
         self, context: ProposerContext
-    ) -> Tuple[List[str], List[str]]:
+    ) -> List[str]:
         tag_candidates = list((context.tag_pool or {}).get("tags", []))
+        if not tag_candidates:
+            return []
         text_blob = json.dumps(
             {
+                "trigger_event": context.trigger_event,
                 "personal_tasks": context.personal_tasks,
                 "team_board": context.team_board,
                 "recent_events": context.recent_events,
             },
             ensure_ascii=False,
         )
-        tags = generate_tags_with_llm(
+        selected = self._select_tags_from_pool(text_blob, tag_candidates)
+        if selected:
+            return selected
+        tags = generate_tags(
             text=text_blob,
-            fixed_prefix=tag_candidates[:2],
-            max_tags=12,
-            llm_client=self.llm_client,
-            llm_mode=self.config.llm_mode,
-            tag_pool=context.tag_pool,
-        ) or generate_tags(text=text_blob, fixed_prefix=tag_candidates[:2], max_tags=12)
-        keywords = [t for t in tags if t not in tag_candidates][:3]
-        tags = [t for t in tags if t in tag_candidates or len(tag_candidates) < 6][:12]
-        return tags, keywords
+            fixed_prefix=[],
+            max_tags=9,
+        )
+        return self._filter_tags_from_pool(tags, context)
+
+    @staticmethod
+    def _select_tags_from_pool(text: str, pool_tags: List[str], max_tags: int = 9) -> List[str]:
+        lowered = text.lower()
+        selected: List[str] = []
+        seen = set()
+        for tag in pool_tags:
+            tag_text = str(tag)
+            if not tag_text:
+                continue
+            key = tag_text.lower()
+            if key in seen:
+                continue
+            if key in lowered:
+                seen.add(key)
+                selected.append(tag_text)
+                if len(selected) >= max_tags:
+                    break
+        return selected
+
+    @staticmethod
+    def _filter_tags_from_pool(tags: List[str], context: ProposerContext, max_tags: int = 9) -> List[str]:
+        pool_tags = list((context.tag_pool or {}).get("tags", []))
+        if not pool_tags:
+            return []
+        pool_set = {str(tag).lower() for tag in pool_tags if tag}
+        filtered: List[str] = []
+        seen = set()
+        for tag in tags:
+            if not tag:
+                continue
+            key = str(tag).lower()
+            if key in seen or key not in pool_set:
+                continue
+            seen.add(key)
+            filtered.append(str(tag))
+            if len(filtered) >= max_tags:
+                break
+        return filtered

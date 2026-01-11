@@ -26,7 +26,6 @@ class IntentionDraft:
     kind: str
     draft_text: str = ""
     retrieval_tags: List[str] = field(default_factory=list)
-    retrieval_keywords: List[str] = field(default_factory=list)
     confidence: float = 0.0
     motivation: float = 0.0
     urgency: float = 0.0
@@ -59,7 +58,6 @@ class IntentionDraft:
                 raw.get("draft_text", raw.get("text", raw.get("message_plan", "")))
             ),
             retrieval_tags=list(raw.get("retrieval_tags", []) or []),
-            retrieval_keywords=list(raw.get("retrieval_keywords", []) or []),
             confidence=float(raw.get("confidence", 0.0)),
             motivation=float(raw.get("motivation", 0.0)),
             urgency=float(raw.get("urgency", 0.0)),
@@ -75,7 +73,6 @@ class IntentionDraft:
             "kind": self.kind,
             "draft_text": self.draft_text,
             "retrieval_tags": list(self.retrieval_tags),
-            "retrieval_keywords": list(self.retrieval_keywords),
             "confidence": self.confidence,
             "motivation": self.motivation,
             "urgency": self.urgency,

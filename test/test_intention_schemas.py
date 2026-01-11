@@ -10,7 +10,6 @@ class TestIntentionDraft:
             kind="speak",
             draft_text="回应最新的发言并引用历史决策",
             retrieval_tags=["讨论", "决策"],
-            retrieval_keywords=["进度"],
         )
 
         payload = draft.to_dict()
@@ -18,7 +17,6 @@ class TestIntentionDraft:
 
         assert restored.kind == "speak"
         assert restored.retrieval_tags == ["讨论", "决策"]
-        assert restored.retrieval_keywords == ["进度"]
 
 
 class TestFinalIntention:

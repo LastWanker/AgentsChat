@@ -9,5 +9,5 @@ policy:
 output:
   - kind: speak
   - payload: {text}
-  - draft_text + retrieval_tags/keywords
+  - draft_text + retrieval_tags
   - confidence/motivation/urgency

@@ -31,11 +31,10 @@ def test_finalizer_only_uses_resolver_results(tmp_path):
         kind="speak",
         draft_text="带上 resolver 找到的引用回复",
         retrieval_tags=[],
-        retrieval_keywords=["讨论"],
         agent_count=1,
     )
 
     final_intention = finalizer.finalize(draft, agent_id="agent-1", intention_id="final-1")
 
     assert final_intention.payload["text"] == draft.draft_text
-    assert {ref["event_id"] for ref in final_intention.references} == {"e-found"}
+    assert final_intention.references == []

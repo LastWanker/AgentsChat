@@ -138,7 +138,7 @@ class AgentController:
             recent_events=recent,
             referenced_events=referenced,
             personal_tasks=personal_tasks,
-            tag_pool=tag_pool,
+            tag_pool={"tags": tag_pool.get("tags", []) if tag_pool else []},
             team_board=team_board,
             agent_count=len(self.agents),
         )
