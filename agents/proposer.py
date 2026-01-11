@@ -88,6 +88,7 @@ class IntentionProposer:
             intentions, hints = self._propose_with_rules(context)
 
         intentions = self._validate_and_trim(intentions)
+        self._record_tag_hits(context, intentions)
         return intentions, hints
 
     # ---------- 模式选择 ----------
@@ -219,6 +220,23 @@ class IntentionProposer:
             intentions = intentions[: self.config.max_intentions_per_event]
 
         return intentions
+
+    @staticmethod
+    def _record_tag_hits(context: ProposerContext, intentions: List[IntentionDraft]) -> None:
+        if not context.memory:
+            return
+        tags: List[str] = []
+        for draft in intentions:
+            tags.extend(draft.retrieval_tags or [])
+        if not tags:
+            return
+        try:
+            context.memory.record_tag_hits(tags)
+        except Exception as exc:  # noqa: BLE001 - best-effort update
+            print(
+                "[agents/proposer.py] ⚠️ tags 命中次数更新失败：",
+                f"{type(exc).__name__}: {exc}",
+            )
 
     def _simple_discussion_reply(self, text: Optional[str]) -> str:
         if text:

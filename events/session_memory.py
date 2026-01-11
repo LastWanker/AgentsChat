@@ -105,7 +105,7 @@ class PersonalTaskTable:
 @dataclass
 class TagPool:
     path: Path
-    mapping: Dict[str, List[str]]
+    mapping: Dict[str, Dict[str, Any]]
 
     @classmethod
     def load(cls, base_dir: Path) -> "TagPool":
@@ -114,7 +114,16 @@ class TagPool:
             raw = json.loads(path.read_text(encoding="utf-8"))
         else:
             raw = {}
-        return cls(path=path, mapping={k: list(v) for k, v in raw.items()})
+        mapping: Dict[str, Dict[str, Any]] = {}
+        for tag, value in raw.items():
+            if isinstance(value, dict):
+                event_ids = list(value.get("event_ids", []) or [])
+                hit_count = int(value.get("hit_count") or 0)
+            else:
+                event_ids = list(value or [])
+                hit_count = 0
+            mapping[str(tag)] = {"event_ids": event_ids, "hit_count": hit_count}
+        return cls(path=path, mapping=mapping)
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -124,23 +133,48 @@ class TagPool:
         for tag in event.tags:
             if not tag:
                 continue
-            bucket = self.mapping.setdefault(tag, [])
-            if event.event_id not in bucket:
-                bucket.append(event.event_id)
+            bucket = self.mapping.setdefault(
+                str(tag), {"event_ids": [], "hit_count": 0}
+            )
+            event_ids = bucket.setdefault("event_ids", [])
+            if event.event_id not in event_ids:
+                event_ids.append(event.event_id)
 
     def list_tags(self) -> List[str]:
-        return list(self.mapping.keys())
+        ranking = []
+        for tag, data in self.mapping.items():
+            hit_count = 0
+            if isinstance(data, dict):
+                hit_count = int(data.get("hit_count") or 0)
+            ranking.append((hit_count, str(tag)))
+        ranking.sort(key=lambda item: (item[0], item[1]))
+        return [tag for _, tag in ranking]
 
     def event_ids_for_tags(self, tags: Iterable[str]) -> List[str]:
         event_ids: List[str] = []
         seen = set()
         for tag in tags:
-            for event_id in self.mapping.get(tag, []):
+            bucket = self.mapping.get(str(tag), {})
+            for event_id in bucket.get("event_ids", []):
                 if event_id in seen:
                     continue
                 seen.add(event_id)
                 event_ids.append(event_id)
         return event_ids
+
+    def record_hits(self, tags: Iterable[str]) -> None:
+        lookup = {str(existing).lower(): existing for existing in self.mapping.keys()}
+        seen = set()
+        for tag in tags:
+            if not tag:
+                continue
+            key = str(tag)
+            match = lookup.get(key.lower(), key)
+            if match.lower() in seen:
+                continue
+            seen.add(match.lower())
+            bucket = self.mapping.setdefault(match, {"event_ids": [], "hit_count": 0})
+            bucket["hit_count"] = int(bucket.get("hit_count") or 0) + 1
 
 
 @dataclass
@@ -212,6 +246,11 @@ class SessionMemory:
 
     def tag_pool_payload(self) -> Dict[str, Any]:
         return {"tags": self.tag_pool.list_tags(), "index": self.tag_pool.mapping}
+
+    def record_tag_hits(self, tags: Iterable[str]) -> None:
+        with self._tag_pool_lock:
+            self.tag_pool.record_hits(tags)
+            self.tag_pool.save()
 
     def seed_tag_pool_from_event(self, event: Event, store: Any) -> None:
         if self.tag_pool.mapping:

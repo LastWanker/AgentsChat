@@ -41,7 +41,7 @@ def main():
         ui_auto_open=settings.ui_auto_open,
         ui_host=settings.ui_host,
         ui_port=settings.ui_port,
-        max_ticks=5,
+        max_ticks=6,
         seed_events=[seed],
         allow_empty_policy=True,
     )
