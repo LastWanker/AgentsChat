@@ -22,7 +22,16 @@ from llm.client import LLMRequestOptions
 
 
 def _stringify_event_content(event: Event) -> str:
-    parts = [str(event.type), str(event.sender), json.dumps(event.content, ensure_ascii=False)]
+    metadata = event.metadata or {}
+    sender_name = metadata.get("sender_name") or metadata.get("name")
+    sender_role = metadata.get("sender_role") or metadata.get("role")
+    parts = [
+        str(event.type),
+        str(event.sender),
+        str(sender_name or ""),
+        str(sender_role or ""),
+        json.dumps(event.content, ensure_ascii=False),
+    ]
     return " ".join(part for part in parts if part)
 
 
@@ -183,6 +192,7 @@ class TeamBoard:
     path: Path
     entries: List[Dict[str, Any]]
     window_events: List[str]
+    last_boss_event_id: Optional[str] = None
 
     @classmethod
     def load(cls, base_dir: Path) -> "TeamBoard":
@@ -195,11 +205,16 @@ class TeamBoard:
             path=path,
             entries=list(raw.get("entries", []) or []),
             window_events=list(raw.get("window_events", []) or []),
+            last_boss_event_id=raw.get("last_boss_event_id"),
         )
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"entries": self.entries, "window_events": self.window_events}
+        payload = {
+            "entries": self.entries,
+            "window_events": self.window_events,
+            "last_boss_event_id": self.last_boss_event_id,
+        }
         self.path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def update(self, event: Event, summary: str, *, kind: str) -> None:
@@ -618,23 +633,19 @@ class SessionMemory:
         return True
 
     def _update_team_board(self, event: Event, store: Any) -> None:
-        summary = self._summarize_event(event)
-        window_ids: List[str] | None = None
+        if not self._is_boss_event(event):
+            return
+        events = self._collect_team_board_events(event, store)
+        seed_prefix = not events
+        summary_events = events if events else [event]
+        summary = self._summarize_team_board(summary_events, seed_prefix=seed_prefix)
+        event_ids = [ev.event_id for ev in summary_events if ev]
         with self._team_board_lock:
-            self.team_board.window_events.append(event.event_id)
-            if self._is_boss_event(event):
-                self.team_board.update(event, summary, kind="boss")
-            if len(self.team_board.window_events) >= 6:
-                window_ids = list(self.team_board.window_events[:6])
-                self.team_board.window_events = self.team_board.window_events[6:]
+            self.team_board.entries.append(
+                {"kind": "boss", "summary": summary, "event_ids": event_ids}
+            )
+            self.team_board.last_boss_event_id = event.event_id
             self.team_board.save()
-        if window_ids:
-            window_summary = self._summarize_window(window_ids, store) or f"最近 6 条事件总结：{summary}"
-            with self._team_board_lock:
-                self.team_board.entries.append(
-                    {"kind": "window", "summary": window_summary, "event_ids": window_ids}
-                )
-                self.team_board.save()
 
     def _update_reference_weights(self, event: Event, store: Any) -> None:
         if not event.references:
@@ -646,25 +657,19 @@ class SessionMemory:
         store.update_event(event)
 
     async def _update_team_board_async(self, event: Event, store: Any) -> None:
-        summary = await self._summarize_event_async(event)
-        window_ids: List[str] | None = None
+        if not self._is_boss_event(event):
+            return
+        events = self._collect_team_board_events(event, store)
+        seed_prefix = not events
+        summary_events = events if events else [event]
+        summary = await self._summarize_team_board_async(summary_events, seed_prefix=seed_prefix)
+        event_ids = [ev.event_id for ev in summary_events if ev]
         with self._team_board_lock:
-            self.team_board.window_events.append(event.event_id)
-            if self._is_boss_event(event):
-                self.team_board.update(event, summary, kind="boss")
-            if len(self.team_board.window_events) >= 6:
-                window_ids = list(self.team_board.window_events[:6])
-                self.team_board.window_events = self.team_board.window_events[6:]
+            self.team_board.entries.append(
+                {"kind": "boss", "summary": summary, "event_ids": event_ids}
+            )
+            self.team_board.last_boss_event_id = event.event_id
             self.team_board.save()
-        if window_ids:
-            window_summary = await self._summarize_window_async(window_ids, store)
-            if not window_summary:
-                window_summary = f"最近 6 条事件总结：{summary}"
-            with self._team_board_lock:
-                self.team_board.entries.append(
-                    {"kind": "window", "summary": window_summary, "event_ids": window_ids}
-                )
-                self.team_board.save()
 
     def _is_boss_event(self, event: Event) -> bool:
         return str(event.sender).upper() == "BOSS" or str(event.sender) == "0"
@@ -792,6 +797,127 @@ class SessionMemory:
         if not summary:
             return None
         return f"最近 6 条事件总结：{self._compact_summary(summary)}"
+
+    def _collect_team_board_events(self, event: Event, store: Any) -> List[Event]:
+        if store is None:
+            return []
+        try:
+            events = store.all()
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            print(
+                f"[events/session_memory.py] ⚠️ 读取事件失败，TeamBoard 仅记录当前事件：{type(exc).__name__}:{exc}"
+            )
+            return []
+        start_index = 0
+        if self.team_board.last_boss_event_id:
+            for idx, ev in enumerate(events):
+                if ev.event_id == self.team_board.last_boss_event_id:
+                    start_index = idx + 1
+                    break
+        end_index = len(events)
+        for idx, ev in enumerate(events):
+            if ev.event_id == event.event_id:
+                end_index = idx
+                break
+        if end_index < start_index:
+            return []
+        return events[start_index:end_index]
+
+    def _summarize_team_board(self, events: List[Event], *, seed_prefix: bool) -> str:
+        summary = self._summarize_team_board_with_llm(events) or self._summarize_team_board_fallback(events)
+        summary = self._compact_summary(summary, max_len=120)
+        if seed_prefix:
+            return f"本次对话的出发点是：{summary}"
+        return summary
+
+    async def _summarize_team_board_async(self, events: List[Event], *, seed_prefix: bool) -> str:
+        summary = await self._summarize_team_board_with_llm_async(events)
+        if not summary:
+            summary = self._summarize_team_board_fallback(events)
+        summary = self._compact_summary(summary, max_len=120)
+        if seed_prefix:
+            return f"本次对话的出发点是：{summary}"
+        return summary
+
+    def _summarize_team_board_with_llm(self, events: List[Event]) -> Optional[str]:
+        if self.llm_client is None:
+            return None
+        payloads = [self._team_board_event_payload(ev) for ev in events if ev]
+        if not payloads:
+            return None
+        prompt = (
+            "请根据事件列表，用“谁做了什么”的句式总结为一句话。"
+            "尽量简短，不使用修饰词。\n"
+            f"事件列表：{json.dumps(payloads, ensure_ascii=False)}"
+        )
+        options = LLMRequestOptions(temperature=0.2, max_tokens=80)
+        messages = [
+            {"role": "system", "content": "你是团队进展摘要器。"},
+            {"role": "user", "content": prompt},
+        ]
+        summary = self._complete(messages, options).strip()
+        if not summary:
+            return None
+        return summary
+
+    async def _summarize_team_board_with_llm_async(self, events: List[Event]) -> Optional[str]:
+        if self.llm_client is None:
+            return None
+        payloads = [self._team_board_event_payload(ev) for ev in events if ev]
+        if not payloads:
+            return None
+        prompt = (
+            "请根据事件列表，用“谁做了什么”的句式总结为一句话。"
+            "尽量简短，不使用修饰词。\n"
+            f"事件列表：{json.dumps(payloads, ensure_ascii=False)}"
+        )
+        options = LLMRequestOptions(temperature=0.2, max_tokens=80)
+        messages = [
+            {"role": "system", "content": "你是团队进展摘要器。"},
+            {"role": "user", "content": prompt},
+        ]
+        summary = (await self._complete_async(messages, options)).strip()
+        if not summary:
+            return None
+        return summary
+
+    def _summarize_team_board_fallback(self, events: List[Event]) -> str:
+        parts = []
+        for ev in events:
+            sender = self._format_sender_label(ev)
+            text = self._extract_event_text(ev)
+            if sender and text:
+                parts.append(f"{sender}：{text}")
+            elif text:
+                parts.append(text)
+            elif sender:
+                parts.append(sender)
+        return "；".join(parts) if parts else ""
+
+    @staticmethod
+    def _extract_event_text(event: Event) -> str:
+        content = event.content or {}
+        if isinstance(content, dict):
+            for key in ("text", "content", "message"):
+                if key in content and content[key]:
+                    return str(content[key])
+        return json.dumps(content, ensure_ascii=False)
+
+    @staticmethod
+    def _format_sender_label(event: Event) -> str:
+        metadata = event.metadata or {}
+        sender_id = str(event.sender or "")
+        sender_name = metadata.get("sender_name") or metadata.get("name")
+        sender_role = metadata.get("sender_role") or metadata.get("role")
+        parts = [sender_id, sender_name, sender_role]
+        return ", ".join(str(part) for part in parts if part)
+
+    def _team_board_event_payload(self, event: Event) -> Dict[str, Any]:
+        return {
+            "sender": self._format_sender_label(event),
+            "content": event.content,
+            "tags": list(event.tags or []),
+        }
 
     def _summarize_event_for_tasks(self, event: Event) -> str:
         summary = self._summarize_event(event)

@@ -112,6 +112,8 @@ class Agent:
     ) -> Dict[str, Any]:
 
         metadata = metadata or {}
+        metadata.setdefault("sender_name", self.name)
+        metadata.setdefault("sender_role", self.role)
 
         event = {
             "event_id": next_event_id(),

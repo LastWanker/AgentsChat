@@ -7,6 +7,34 @@ from config.roles import role_prompt_description
 from llm.schemas import TAG_GENERATION_SCHEMA, schema_for_phase
 
 
+def _event_corpus_payload(event: Any) -> Dict[str, Any]:
+    if event is None:
+        return {"sender": "", "content": {}, "tags": []}
+    if hasattr(event, "__dict__"):
+        event = event.__dict__
+    metadata = event.get("metadata") or {}
+    sender_id = str(event.get("sender", ""))
+    sender_name = metadata.get("sender_name") or metadata.get("name") or event.get("sender_name")
+    sender_role = metadata.get("sender_role") or metadata.get("role") or event.get("sender_role")
+    sender_parts = [sender_id, sender_name, sender_role]
+    sender_label = ", ".join(str(part) for part in sender_parts if part)
+    content = event.get("content") or event.get("payload") or {}
+    tags = list(event.get("tags") or [])
+    return {"sender": sender_label, "content": content, "tags": tags}
+
+
+def _team_board_payload(entries: List[Dict[str, Any]] | None) -> List[Dict[str, Any]]:
+    payload: List[Dict[str, Any]] = []
+    for entry in entries or []:
+        payload.append(
+            {
+                "kind": entry.get("kind", ""),
+                "summary": entry.get("summary", ""),
+            }
+        )
+    return payload
+
+
 def build_intention_prompt(
     *,
     agent_name: str,
@@ -47,29 +75,35 @@ def build_intention_prompt(
         schema_json=json.dumps(schema, ensure_ascii=False),
     )
 
+    recent_payloads = [_event_corpus_payload(ev) for ev in (recent_events or [])]
+    referenced_payloads = [_event_corpus_payload(ev) for ev in (referenced_events or [])]
+    team_payload = _team_board_payload(team_board)
+
+    trigger_payload = _event_corpus_payload(trigger_event)
     user_lines = [
         "当前触发事件如下：",
-        f"sender={trigger_event.get('sender')}",
+        f"sender={trigger_payload.get('sender') or trigger_event.get('sender')}",
         f"type={trigger_event.get('type')}",
         f"content={trigger_event.get('content', trigger_event.get('payload'))}",
         "最近事件（可参考）：",
-        json.dumps(recent_events or [], ensure_ascii=False),
+        json.dumps(recent_payloads, ensure_ascii=False),
         "触发事件引用链（可参考）：",
-        json.dumps(referenced_events or [], ensure_ascii=False),
+        json.dumps(referenced_payloads, ensure_ascii=False),
         "个人事务表（可参考）：",
         json.dumps(personal_tasks or {}, ensure_ascii=False),
         "tags 池（仅关键词列表，可参考）：",
         json.dumps(tag_pool or {}, ensure_ascii=False),
         "TeamBoard（可参考）：",
-        json.dumps(team_board or [], ensure_ascii=False),
+        json.dumps(team_payload, ensure_ascii=False),
     ]
     if phase == "finalize":
+        candidate_payloads = [_event_corpus_payload(ev) for ev in (candidate_events or [])]
         user_lines.extend(
             [
                 "起草阶段输出（可参考）：",
                 json.dumps(draft_intention or {}, ensure_ascii=False),
                 "候选事件完整内容（可参考）：",
-                json.dumps(candidate_events or [], ensure_ascii=False),
+                json.dumps(candidate_payloads, ensure_ascii=False),
             ]
         )
     user_lines.append("请给出本阶段 JSON 输出。")

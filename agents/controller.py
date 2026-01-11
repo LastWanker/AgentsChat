@@ -84,7 +84,8 @@ class AgentController:
         team_board: List[Dict[str, Any]] = []
         if self.query is not None:
             try:
-                recent = [e.__dict__ if hasattr(e, "__dict__") else dict(e) for e in self.query.last_n(20)]
+                recent_events = [e.__dict__ if hasattr(e, "__dict__") else dict(e) for e in self.query.last_n(20)]
+                recent = [self._event_corpus_payload(ev) for ev in recent_events]
             except Exception as exc:
                 print(
                     f"[agents/controller.py] ⚠️ 获取最近事件失败，将使用空列表：{type(exc).__name__}:{exc}"
@@ -97,7 +98,7 @@ class AgentController:
                 for r in refs[:10]:
                     ev = self.store.get(ref_event_id(r))
                     if ev:
-                        referenced.append(ev.__dict__ if hasattr(ev, "__dict__") else dict(ev))
+                        referenced.append(self._event_corpus_payload(ev.__dict__ if hasattr(ev, "__dict__") else dict(ev)))
             except Exception as exc:
                 print(
                     f"[agents/controller.py] ⚠️ 读取引用事件失败，将忽略引用：{type(exc).__name__}:{exc}"
@@ -121,7 +122,7 @@ class AgentController:
                     f"[agents/controller.py] ⚠️ 读取 tags 池失败：{type(exc).__name__}:{exc}"
                 )
             try:
-                team_board = self.memory.team_board_payload()
+                team_board = self._team_board_payload(self.memory.team_board_payload())
             except Exception as exc:
                 print(
                     f"[agents/controller.py] ⚠️ 读取 TeamBoard 失败：{type(exc).__name__}:{exc}"
@@ -151,3 +152,27 @@ class AgentController:
             return None
         ev = recent[0]
         return ev.__dict__ if hasattr(ev, "__dict__") else dict(ev)
+
+    @staticmethod
+    def _event_corpus_payload(event: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = event.get("metadata") or {}
+        sender_id = str(event.get("sender", ""))
+        sender_name = metadata.get("sender_name") or metadata.get("name") or event.get("sender_name")
+        sender_role = metadata.get("sender_role") or metadata.get("role") or event.get("sender_role")
+        sender_parts = [sender_id, sender_name, sender_role]
+        sender_label = ", ".join(str(part) for part in sender_parts if part)
+        content = event.get("content") or event.get("payload") or {}
+        tags = list(event.get("tags") or [])
+        return {"sender": sender_label, "content": content, "tags": tags}
+
+    @staticmethod
+    def _team_board_payload(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        payload: List[Dict[str, Any]] = []
+        for entry in entries or []:
+            payload.append(
+                {
+                    "kind": entry.get("kind", ""),
+                    "summary": entry.get("summary", ""),
+                }
+            )
+        return payload
