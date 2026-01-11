@@ -26,7 +26,7 @@
 - **IntentInterpreter**（`agents/interpreter.py`）：解析 YAML 策略，支持必填字段、引用数量/类型检查，以及禁用表达式的安全求值；允许在未安装 PyYAML 时开启空策略模式。【F:agents/interpreter.py†L77-L143】【F:agents/interpreter.py†L169-L238】
 - **Router**（`platform/router.py`）：调用解释器，把通过的意向转换为事件写入存储与世界。【F:platform/router.py†L39-L87】
 - **World**（`platform/world.py`）：维护事件时间线与 id 索引，并向观察者广播。【F:platform/world.py†L6-L63】
-- **Scheduler**（`runtime/scheduler.py`）：按 agent 最近轮次调度下一位发言者。【F:runtime/scheduler.py†L1-L26】
+- **Scheduler**（`runtime/scheduler.py`）：可替换调度外壳，策略放在 `runtime/scheduler_strategies/`，默认使用最近久未发言策略；可在 `RuntimeConfig.scheduler_strategy` 指定切换。
 - **事件存储/查询**：`events/store.py` 将事件持久化到指定数据目录并记录 session 元数据；`events/query.py` 提供最近事件检索用于 proposer。【F:events/store.py†L1-L116】【F:events/query.py†L1-L49】
 - **观察者**：`platform/observers.py` 定义基本接口，`ui/console.py` 提供控制台输出示例。【F:platform/observers.py†L1-L30】【F:ui/console.py†L1-L9】
 

@@ -1,31 +1,32 @@
+from __future__ import annotations
+
+from runtime.scheduler_strategies import SchedulerStrategy
+from runtime.scheduler_strategies import recency
+
+
 class Scheduler:
     """
-    v0.2：按 agent 最近未发言优先进行轮次调度。
+    可替换调度器：由具体策略模块决定下一个发言者。
     """
 
-    def __init__(self) -> None:
-        self._last_turn_tick: dict[str, int] = {}
+    def __init__(
+        self,
+        strategy: SchedulerStrategy | None = None,
+        *,
+        strategy_config: dict | None = None,
+    ) -> None:
+        self._strategy = strategy or recency
+        self._state = self._strategy.init_state(strategy_config)
+
+    @property
+    def strategy_name(self) -> str:
+        return getattr(self._strategy, "name", "<unknown>")
 
     def mark_seed_speakers(self, sender_ids: list[str], *, loop_tick: int = 0) -> None:
-        for sender_id in sender_ids:
-            if sender_id is None:
-                continue
-            self._last_turn_tick[str(sender_id)] = loop_tick
+        self._strategy.mark_seed_speakers(self._state, sender_ids, loop_tick=loop_tick)
 
     def choose_agent(self, agents, *, loop_tick: int = 0):
-        if not agents:
-            print("[runtime/scheduler.py] 🙅‍♂️ 没有可调度的 Agent。")
-            return None, None
-
-        def last_turn(agent_id: str) -> int:
-            return self._last_turn_tick.get(agent_id, -1)
-
-        ordered = sorted(agents, key=lambda ag: (last_turn(ag.id), ag.name))
-        picked = ordered[0]
-        print(
-            f"[runtime/scheduler.py] 🎲 轮到 {picked.name} 上麦（最近轮次={last_turn(picked.id)}）。"
-        )
-        return picked, 0.0
+        return self._strategy.choose_agent(agents, self._state, loop_tick=loop_tick)
 
     def record_turn(self, agent_id: str, *, loop_tick: int) -> None:
-        self._last_turn_tick[agent_id] = loop_tick
+        self._strategy.record_turn(self._state, agent_id, loop_tick=loop_tick)

@@ -11,6 +11,7 @@ from platform.observers import AgentObserver
 from agents.controller import AgentController
 from runtime.loop import RuntimeLoop
 from runtime.scheduler import Scheduler
+from runtime.scheduler_strategies import get_strategy
 from platform.router import Router
 from agents.interpreter import IntentInterpreter
 from agents.agent import Agent
@@ -52,6 +53,8 @@ class RuntimeConfig:
     # Loop
     max_ticks: int = 50
     seed_events: Optional[List[dict]] = None  # 允许 boss/测试注入事件
+    scheduler_strategy: str = "recency"
+    scheduler_strategy_config: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -204,7 +207,11 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
     print("[runtime/bootstrap.py] 🧠 IntentionProposer 与 IntentInterpreter 已就绪。")
 
     # === Scheduler/Router/Controller/Loop ===
-    scheduler = Scheduler()
+    scheduler_strategy = get_strategy(cfg.scheduler_strategy)
+    scheduler = Scheduler(
+        strategy=scheduler_strategy,
+        strategy_config=cfg.scheduler_strategy_config,
+    )
     router = Router(
         world=world,
         store=store,
