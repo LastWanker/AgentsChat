@@ -190,10 +190,45 @@
       "即将发送..."
     ];
     let draftingIndex = 0;
+    const bubbleColors = [
+      "#fef3c7",
+      "#e0f2fe",
+      "#dcfce7",
+      "#fce7f3",
+      "#ede9fe",
+      "#ffe4e6",
+      "#f1f5f9"
+    ];
+    const bubbleColorMap = new Map();
 
     function pickAvatar(name) {
       if (!name) return "?";
       return name.trim();
+    }
+
+    function hashString(value) {
+      let hash = 0;
+      for (let i = 0; i < value.length; i += 1) {
+        hash = (hash * 31 + value.charCodeAt(i)) % 2147483647;
+      }
+      return hash;
+    }
+
+    function getBubbleColor(senderKey, sessionId) {
+      const key = `${sessionId || "default"}:${senderKey || "unknown"}`;
+      if (bubbleColorMap.has(key)) {
+        return bubbleColorMap.get(key);
+      }
+      const normalized = (senderKey || "").toLowerCase();
+      if (normalized === "boss") {
+        const bossColor = "#ffffff";
+        bubbleColorMap.set(key, bossColor);
+        return bossColor;
+      }
+      const index = Math.abs(hashString(`${key}:seed`)) % bubbleColors.length;
+      const color = bubbleColors[index];
+      bubbleColorMap.set(key, color);
+      return color;
     }
 
     function formatContent(event) {
@@ -209,7 +244,7 @@
       if (refs.length === 0) {
         return [{ id: "-", weight: "0" }];
       }
-            return refs.map((ref) => {
+      return refs.map((ref) => {
         const weight = ref.weight || {};
         const weightKeys = Object.keys(weight);
         if (weightKeys.length === 0) {
@@ -256,6 +291,7 @@
         row.className = "message-row";
         const sender = event.sender || "";
         const senderName = event.sender_name || sender;
+        const senderKey = senderName || sender || "unknown";
         if (sender === "you" || sender === "self") {
           row.classList.add("is-self");
         }
@@ -278,6 +314,7 @@
         } else {
           bubble.textContent = formatContent(event);
         }
+        bubble.style.backgroundColor = getBubbleColor(senderKey, sessionSelect.value);
 
         if (row.classList.contains("is-self")) {
           bubble.classList.add("is-self");
@@ -285,14 +322,8 @@
 
         const meta = document.createElement("div");
         meta.className = "meta";
-        const references = formatReferences(event);
         const typeLabel = event.type || "-";
-        meta.innerHTML = `<div>事件 ID: ${event.event_id || "-"} 类型 ${typeLabel}</div>` +
-          references
-            .map((reference) => (
-              `<div>引用: ${reference.id} 权重: ${reference.weight}</div>`
-            ))
-            .join("");
+        meta.innerHTML = `<div>事件 ID: ${event.event_id || "-"} 类型 ${typeLabel}</div>`;
 
         stack.appendChild(bubble);
         stack.appendChild(meta);
