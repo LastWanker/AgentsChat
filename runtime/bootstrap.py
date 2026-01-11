@@ -249,8 +249,6 @@ def bootstrap(cfg: RuntimeConfig) -> AppRuntime:
             world.emit(ev)
             if first_seed is None:
                 first_seed = ev
-        if first_seed is not None:
-            memory.seed_tag_pool_from_event(first_seed, store)
         print(f"[runtime/bootstrap.py] 🌱 预置种子事件 {len(cfg.seed_events)} 条已注入世界。")
     else:
         print("[runtime/bootstrap.py] 🌱 没有预置种子事件，等待运行时自然生成。")

@@ -14,6 +14,7 @@ from events.tagging import (
     generate_extra_tags_with_llm,
     generate_extra_tags_with_llm_async,
     generate_tags,
+    generate_tags_with_llm_async,
     generate_tags_with_llm,
 )
 from events.types import Event
@@ -325,17 +326,17 @@ class SessionMemory:
 
     def _enqueue_maintenance(self, event: Event, store: Any) -> None:
         if self._maintenance_stopping:
-            self._run_maintenance_sync(event, store)
+            self._update_reference_weights(event, store)
             return
         if not self._maintenance_loop or not self._maintenance_queue:
-            self._run_maintenance_sync(event, store)
+            self._update_reference_weights(event, store)
             return
         try:
             self._maintenance_loop.call_soon_threadsafe(
                 self._maintenance_queue.put_nowait, (event, store)
             )
         except RuntimeError:
-            self._run_maintenance_sync(event, store)
+            self._update_reference_weights(event, store)
 
     async def _maintenance_worker(self) -> None:
         if not self._maintenance_queue:
@@ -347,25 +348,26 @@ class SessionMemory:
                 break
             event, store = item
             try:
-                await self._run_maintenance_tasks(event, store)
+                await self._run_weight_task(event, store)
             except Exception as exc:  # noqa: BLE001 - ensure background loop lives
                 print(f"[events/session_memory.py] ⚠️ 维护任务失败: {type(exc).__name__}: {exc}")
             finally:
                 self._maintenance_queue.task_done()
 
-    async def _run_maintenance_tasks(self, event: Event, store: Any) -> None:
+    async def _run_weight_task(self, event: Event, store: Any) -> None:
+        await asyncio.to_thread(self._update_reference_weights, event, store)
+
+    async def _run_inline_tasks(self, event: Event, store: Any) -> None:
         await asyncio.gather(
             self._update_personal_tasks_async(event),
             self._update_tags_async(event, store),
             self._update_team_board_async(event, store),
-            asyncio.to_thread(self._update_reference_weights, event, store),
         )
 
-    def _run_maintenance_sync(self, event: Event, store: Any) -> None:
+    def _run_inline_sync(self, event: Event, store: Any) -> None:
         self._update_personal_tasks(event)
         self._update_tags(event, store)
         self._update_team_board(event, store)
-        self._update_reference_weights(event, store)
 
     def wait_for_maintenance(self, timeout: Optional[float] = None) -> bool:
         if not self._maintenance_loop or not self._maintenance_queue:
@@ -429,10 +431,15 @@ class SessionMemory:
         return result.get("value")
 
     def handle_event(self, event: Event, store: Any) -> None:
+        try:
+            self._run_coroutine_sync(self._run_inline_tasks(event, store))
+        except Exception as exc:  # noqa: BLE001 - fallback to sync path
+            print(f"[events/session_memory.py] ⚠️ 主循环维护任务失败: {type(exc).__name__}: {exc}")
+            self._run_inline_sync(event, store)
         if self._maintenance_enabled:
             self._enqueue_maintenance(event, store)
         else:
-            self._run_maintenance_sync(event, store)
+            self._update_reference_weights(event, store)
 
     def shutdown(self, timeout: Optional[float] = None) -> bool:
         if not self._maintenance_loop or not self._maintenance_queue:
@@ -485,6 +492,8 @@ class SessionMemory:
     def _update_tags(self, event: Event, store: Any) -> None:
         content_text = _stringify_event_content(event)
         updated = False
+        seeded = self._seed_tag_pool_if_empty(event, content_text, store)
+        updated = updated or seeded
         normalized = self._normalize_selected_tags(event.tags)
         if normalized != event.tags:
             event.tags = normalized
@@ -513,6 +522,8 @@ class SessionMemory:
     async def _update_tags_async(self, event: Event, store: Any) -> None:
         content_text = _stringify_event_content(event)
         updated = False
+        seeded = await self._seed_tag_pool_if_empty_async(event, content_text, store)
+        updated = updated or seeded
         normalized = self._normalize_selected_tags(event.tags)
         if normalized != event.tags:
             event.tags = normalized
@@ -563,6 +574,48 @@ class SessionMemory:
             if len(normalized) >= max_tags:
                 break
         return normalized
+
+    def _seed_tag_pool_if_empty(self, event: Event, content_text: str, store: Any) -> bool:
+        if self.tag_pool.mapping or event.tags:
+            return False
+        seed_tags = generate_tags_with_llm(
+            text=content_text,
+            max_tags=6,
+            llm_client=self.llm_client,
+            llm_mode=self.llm_mode,
+        ) or generate_tags(text=content_text, max_tags=6)
+        if not seed_tags:
+            return False
+        event.tags = self._normalize_selected_tags(seed_tags)
+        with self._tag_pool_lock:
+            store.update_event(event)
+            self.tag_pool.update_from_event(event)
+            self.tag_pool.save()
+        return True
+
+    async def _seed_tag_pool_if_empty_async(
+        self, event: Event, content_text: str, store: Any
+    ) -> bool:
+        if self.tag_pool.mapping or event.tags:
+            return False
+        seed_tags = None
+        if self.llm_client is not None:
+            seed_tags = await generate_tags_with_llm_async(
+                text=content_text,
+                max_tags=6,
+                llm_client=self.llm_client,
+                semaphore=self._llm_semaphore,
+            )
+        if seed_tags is None:
+            seed_tags = generate_tags(text=content_text, max_tags=6)
+        if not seed_tags:
+            return False
+        event.tags = self._normalize_selected_tags(seed_tags)
+        with self._tag_pool_lock:
+            store.update_event(event)
+            self.tag_pool.update_from_event(event)
+            self.tag_pool.save()
+        return True
 
     def _update_team_board(self, event: Event, store: Any) -> None:
         summary = self._summarize_event(event)
