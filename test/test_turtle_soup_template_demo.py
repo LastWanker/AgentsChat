@@ -25,11 +25,11 @@ def main():
         print("[test_turtle_soup_template_demo] ⚠️ LLM 客户端未创建成功。")
         return
 
-    boss = Agent("主持人", role="TurtleSoupHost", expertise=["turtle_soup", "moderation"])
-    policeman = Agent("王警官", role="Policeman", expertise=["evidence", "logic"])
+    boss = Agent("BOSS", role="TurtleSoupHost", expertise=["turtle_soup", "moderation"])
+    policeman = Agent("Officer", role="Policeman", expertise=["evidence", "logic"])
     girl = Agent("Lily", role="LittleGirl", expertise=["imagination", "wild_guess"])
     alien = Agent("X-9", role="AlienRobot", expertise=["logic", "probability"])
-    doctor = Agent("陈医生", role="DoctorMiss", expertise=["medicine", "psychology"])
+    doctor = Agent("Dr. Chen", role="DoctorMiss", expertise=["medicine", "psychology"])
 
     seed = boss.speak(
         "各位欢迎来到海龟汤。玩法说明：你们通过提问来还原谜底，你们可以发表见解，但是也要记得珍惜发言机会进行提问。"
@@ -50,7 +50,7 @@ def main():
         ui_auto_open=settings.ui_auto_open,
         ui_host=settings.ui_host,
         ui_port=settings.ui_port,
-        max_ticks=80,
+        max_ticks=30,
         seed_events=[seed],
         allow_empty_policy=True,
         scheduler_strategy="template_order",
