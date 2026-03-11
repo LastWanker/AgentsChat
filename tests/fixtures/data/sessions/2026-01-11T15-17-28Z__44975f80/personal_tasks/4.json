@@ -1,0 +1,21 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "4",
+      "event_ids": [
+        "9"
+      ],
+      "summary": "4：醉酒男人关灯后，黑暗是否引发操作失误导致事故波及远处。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "4",
+      "event_ids": [
+        "17"
+      ],
+      "summary": "4：醉酒者关灯可能触发依赖光照的设备故障，导致远处人死亡。"
+    }
+  ],
+  "todo_list": []
+}

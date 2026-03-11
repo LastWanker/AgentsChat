@@ -1,0 +1,21 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "2",
+      "event_ids": [
+        "5"
+      ],
+      "summary": "2：2号猜测醉汉关灯可能引发船只相撞或动物迷路，甚至触发远程机器。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "2",
+      "event_ids": [
+        "13"
+      ],
+      "summary": "2：2号猜测打嗝叔叔喝水原因，提出妖怪、魔法、青蛙、比赛等童趣设想。"
+    }
+  ],
+  "todo_list": []
+}

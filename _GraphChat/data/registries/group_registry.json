@@ -1,0 +1,9 @@
+{
+  "groups": {
+    "main": [
+      "agent_1",
+      "agent_2",
+      "agent_3"
+    ]
+  }
+}

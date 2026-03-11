@@ -1,0 +1,53 @@
+{
+  "policy_path": "F:\\GitHub\\AgentsChat\\policies\\intent_constraint.yaml",
+  "enable_llm": true,
+  "agents": [
+    {
+      "id": "1",
+      "name": "主持人",
+      "role": "TurtleSoupHost",
+      "expertise": [
+        "turtle_soup",
+        "moderation"
+      ]
+    },
+    {
+      "id": "2",
+      "name": "王警官",
+      "role": "Policeman",
+      "expertise": [
+        "evidence",
+        "logic"
+      ]
+    },
+    {
+      "id": "3",
+      "name": "Lily",
+      "role": "LittleGirl",
+      "expertise": [
+        "imagination",
+        "wild_guess"
+      ]
+    },
+    {
+      "id": "4",
+      "name": "X-9",
+      "role": "AlienRobot",
+      "expertise": [
+        "logic",
+        "probability"
+      ]
+    },
+    {
+      "id": "5",
+      "name": "陈医生",
+      "role": "DoctorMiss",
+      "expertise": [
+        "medicine",
+        "psychology"
+      ]
+    }
+  ],
+  "session_id": "2026-01-11T15-09-28Z__41266933",
+  "created_at": "2026-01-11T15:09:28.271180+00:00"
+}

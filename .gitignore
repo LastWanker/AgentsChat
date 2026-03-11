@@ -135,12 +135,14 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+_GraphChat/.env.local
 
 # Spyder project settings
 .spyderproject

@@ -1,0 +1,29 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "3",
+      "event_ids": [
+        "4"
+      ],
+      "summary": "3：醉酒叔叔关灯塔灯致船撞，远处人因灯灭遇险。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "3",
+      "event_ids": [
+        "8"
+      ],
+      "summary": "3：3号询问死者死时眼睛状态及是否在等待信号。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "3",
+      "event_ids": [
+        "12"
+      ],
+      "summary": "3：孩子猜测醉酒者误关导航灯导致事故，并询问灯的作用、环境及视野。"
+    }
+  ],
+  "todo_list": []
+}

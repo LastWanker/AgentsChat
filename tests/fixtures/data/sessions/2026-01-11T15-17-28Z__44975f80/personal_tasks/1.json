@@ -1,0 +1,21 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "3"
+      ],
+      "summary": "1：1号询问房间与远处死亡地点是否在同一建筑内。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "11"
+      ],
+      "summary": "1：用户询问关灯是否会影响房间内其他设备的信号状态。"
+    }
+  ],
+  "todo_list": []
+}

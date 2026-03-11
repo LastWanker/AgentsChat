@@ -1,0 +1,40 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	listening(listening)
+	silent_loop_subgraph(silent_loop_subgraph)
+	decide_wake(decide_wake)
+	plan_action(plan_action)
+	retrieval_subgraph(retrieval_subgraph)
+	citation_guard(citation_guard)
+	board_subgraph(board_subgraph)
+	governance_subgraph(governance_subgraph)
+	policy_gate(policy_gate)
+	schema_guard(schema_guard)
+	action_registry_guard(action_registry_guard)
+	idempotency_guard(idempotency_guard)
+	emit_event(emit_event)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> listening;
+	action_registry_guard --> idempotency_guard;
+	board_subgraph --> governance_subgraph;
+	citation_guard --> board_subgraph;
+	decide_wake -.-> __end__;
+	decide_wake -.-> plan_action;
+	governance_subgraph --> policy_gate;
+	idempotency_guard --> emit_event;
+	listening --> silent_loop_subgraph;
+	plan_action -.-> citation_guard;
+	plan_action -.-> retrieval_subgraph;
+	policy_gate --> schema_guard;
+	retrieval_subgraph --> citation_guard;
+	schema_guard --> action_registry_guard;
+	silent_loop_subgraph --> decide_wake;
+	emit_event --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

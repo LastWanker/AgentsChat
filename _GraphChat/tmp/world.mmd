@@ -1,0 +1,23 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__(<p>__start__</p>)
+	ingest_events(ingest_events)
+	route_scope(route_scope)
+	select_runnable_agents(select_runnable_agents)
+	run_agent(run_agent)
+	collect_agent_outputs(collect_agent_outputs)
+	commit_events(commit_events)
+	publish_updates(publish_updates)
+	idle_check(idle_check)
+	__end__(<p>__end__</p>)
+	__start__ --> ingest_events;
+	ingest_events --> route_scope;
+	route_scope --> select_runnable_agents;
+	select_runnable_agents --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

@@ -1,0 +1,21 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "3"
+      ],
+      "summary": "1：醉酒男子进入房间并关灯，动机与场所性质成疑。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "11"
+      ],
+      "summary": "1：醉酒看守人关灯致船撞礁沉没。"
+    }
+  ],
+  "todo_list": []
+}

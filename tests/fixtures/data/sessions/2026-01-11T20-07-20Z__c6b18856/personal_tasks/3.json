@@ -1,0 +1,21 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "3",
+      "event_ids": [
+        "7"
+      ],
+      "summary": "3：醉酒男关灯致信号失灵引发事故致人死亡。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "3",
+      "event_ids": [
+        "15"
+      ],
+      "summary": "3：3号询问男人打嗝原因、止嗝尝试、酒吧水成分及最终是否止嗝。"
+    }
+  ],
+  "todo_list": []
+}

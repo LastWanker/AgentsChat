@@ -49,3 +49,10 @@ AgentsChat 是一个以“事件-意向闭环”为核心的多智能体实验�
 完整的思路与分析过程，请从 `SystemAnalysis/` 目录开始，包含系统模块分析、数据流分析、权重合理性分析与阶段性体检报告。
 
 如需运行示例，可参考 `main.py` 与 `test/` 目录中的脚本。需要一个LLM API
+
+## Runtime Notes (2026-03-09)
+
+- Preferred entrypoint: `python -m agents_chat.app.cli`
+- Tests location: `tests/` (`unit`, `integration`, `e2e`)
+- Examples location: `examples/`
+- Default workflow engine: `langgraph` (auto-fallback to `legacy` when `langgraph` package is missing)

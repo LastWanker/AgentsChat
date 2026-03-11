@@ -1,0 +1,37 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "1"
+      ],
+      "summary": "1：主持人介绍海龟汤游戏规则并开启谜题《关灯之后》。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "2"
+      ],
+      "summary": "1：男警察按顺序开始提问。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "6"
+      ],
+      "summary": "1：Lily猜测部分正确，X-9质疑合理，谜题允许情境设定，女医生提问。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "1",
+      "event_ids": [
+        "10"
+      ],
+      "summary": "1：1号提醒X-9聚焦可验证事实提问。"
+    }
+  ],
+  "todo_list": []
+}

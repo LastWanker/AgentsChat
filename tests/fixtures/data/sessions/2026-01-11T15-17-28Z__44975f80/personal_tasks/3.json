@@ -1,0 +1,21 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "3",
+      "event_ids": [
+        "7"
+      ],
+      "summary": "3：醉酒男人关灯行为与远处人死亡之间的因果关系待查。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "3",
+      "event_ids": [
+        "15"
+      ],
+      "summary": "3：3号提出三个假设检验关灯行为与远处人死亡的直接或间接关联。"
+    }
+  ],
+  "todo_list": []
+}

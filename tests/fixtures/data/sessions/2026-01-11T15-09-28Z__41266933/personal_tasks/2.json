@@ -1,0 +1,29 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "2",
+      "event_ids": [
+        "3"
+      ],
+      "summary": "2：2号发言者就醉酒男子与死者关系、案发空间关联、时间间隔及死因提出疑问。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "2",
+      "event_ids": [
+        "7"
+      ],
+      "summary": "2：2号发言者要求明确事件细节以评估假设。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "2",
+      "event_ids": [
+        "11"
+      ],
+      "summary": "2：发言者支持X-9，强调事实核查，并就关灯与死亡关联提出三个具体问题。"
+    }
+  ],
+  "todo_list": []
+}

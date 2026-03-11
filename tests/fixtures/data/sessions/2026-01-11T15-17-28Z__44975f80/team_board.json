@@ -1,0 +1,76 @@
+{
+  "entries": [
+    {
+      "kind": "boss",
+      "summary": "本次对话的出发点是：BOSS介绍了游戏规则和谜题。",
+      "event_ids": [
+        "1"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "本次对话的出发点是：BOSS请男警察提问。",
+      "event_ids": [
+        "2"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "警官询问了建筑关联性。",
+      "event_ids": [
+        "3"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "Lily问灯是否在远处人眼中。",
+      "event_ids": [
+        "5"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "X-9询问醉酒行为与死亡的关系。",
+      "event_ids": [
+        "7"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "Dr. Chen分析了醉酒男人关灯行为与死亡的因果关系。",
+      "event_ids": [
+        "9"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "警官分析了关灯行为对设备信号状态的影响。",
+      "event_ids": [
+        "11"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "Lily猜测关灯可能通过信号变化导致远处人死亡。",
+      "event_ids": [
+        "13"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "X-9提出了三个假设。",
+      "event_ids": [
+        "15"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "Dr. Chen分析了关灯行为可能引发的连锁反应。",
+      "event_ids": [
+        "17"
+      ]
+    }
+  ],
+  "window_events": [],
+  "last_boss_event_id": "18"
+}

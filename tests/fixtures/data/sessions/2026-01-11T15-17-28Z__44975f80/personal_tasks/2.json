@@ -1,0 +1,21 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "2",
+      "event_ids": [
+        "5"
+      ],
+      "summary": "2：2号询问关灯时灯光是否映在远处人眼中。"
+    },
+    {
+      "memory": false,
+      "source_agent_id": "2",
+      "event_ids": [
+        "13"
+      ],
+      "summary": "2：发送者2猜测关灯可能通过声音、光信号或影响远处设备间接导致他人死亡。"
+    }
+  ],
+  "todo_list": []
+}

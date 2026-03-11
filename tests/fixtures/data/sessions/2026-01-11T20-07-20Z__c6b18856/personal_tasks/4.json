@@ -1,0 +1,13 @@
+{
+  "done_list": [
+    {
+      "memory": false,
+      "source_agent_id": "4",
+      "event_ids": [
+        "9"
+      ],
+      "summary": "4：醉酒男人误关关键设备指示灯或开关，导致远处依赖该设备的人死亡。"
+    }
+  ],
+  "todo_list": []
+}

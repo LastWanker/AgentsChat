@@ -1,0 +1,69 @@
+{
+  "entries": [
+    {
+      "kind": "boss",
+      "summary": "本次对话的出发点是：BOSS介绍了游戏规则和谜题。",
+      "event_ids": [
+        "1"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "本次对话的出发点是：BOSS宣布游戏开始。",
+      "event_ids": [
+        "2"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "警官分析了醉酒男人的行为。",
+      "event_ids": [
+        "3"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "Lily提出了信号灯或机械按钮的假设。",
+      "event_ids": [
+        "5"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "X-9提出醉酒男人关灯导致交通事故的假设。",
+      "event_ids": [
+        "7"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "Dr. Chen 推测醉酒男人误关关键设备指示灯导致死亡事故。",
+      "event_ids": [
+        "9"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "警察猜测醉酒看守人关灯致船沉人亡。",
+      "event_ids": [
+        "11"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "Lily猜测了叔叔的行为动机。",
+      "event_ids": [
+        "13"
+      ]
+    },
+    {
+      "kind": "boss",
+      "summary": "X-9提问了四个问题。",
+      "event_ids": [
+        "15"
+      ]
+    }
+  ],
+  "window_events": [],
+  "last_boss_event_id": "16"
+}
