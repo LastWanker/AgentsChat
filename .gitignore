@@ -195,3 +195,18 @@ cython_debug/
 /_GraphChat/data/
 /_GraphChat/_GraphChat/
 
+# Local runtime artifacts
+logs/
+*.tmp
+*.temp
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Secret env variants (keep examples)
+.env.*
+!.env.example
+
