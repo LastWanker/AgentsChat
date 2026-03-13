@@ -8,6 +8,8 @@ from pathlib import Path
 
 
 def bootstrap_src(root: Path) -> None:
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
     src = root / "src"
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
@@ -25,13 +27,21 @@ def main() -> None:
     root = Path(args.root).resolve()
     bootstrap_src(root)
 
-    from graphchat import GraphChatRuntime
-    from graphchat.application.graphs.graph_metadata import GRAPH_METADATA
-    from graphchat.application.graphs.subgraphs.board_subgraph import BoardDeps, build_board_subgraph
-    from graphchat.application.graphs.subgraphs.governance_subgraph import build_governance_subgraph
-    from graphchat.application.graphs.subgraphs.retrieval_subgraph import RetrievalDeps, build_retrieval_subgraph
-    from graphchat.application.graphs.subgraphs.silent_loop_subgraph import build_silent_loop_subgraph
-    from graphchat.interfaces.ui.graph_bundle import (
+    from src.graphchat import GraphChatRuntime
+    from src.graphchat.application.graphs.graph_metadata import GRAPH_METADATA
+    from src.graphchat.application.graphs.subgraphs.action_parallel_subgraph import (
+        ActionParallelDeps,
+        build_action_parallel_subgraph,
+    )
+    from src.graphchat.application.graphs.subgraphs.board_subgraph import BoardDeps, build_board_subgraph
+    from src.graphchat.application.graphs.subgraphs.guardrail_subgraph import GuardrailDeps, build_guardrail_subgraph
+    from src.graphchat.application.graphs.subgraphs.governance_subgraph import build_governance_subgraph
+    from src.graphchat.application.graphs.subgraphs.listening_subgraph import build_listening_subgraph
+    from src.graphchat.application.graphs.subgraphs.retrieval_subgraph import RetrievalDeps, build_retrieval_subgraph
+    from src.graphchat.application.graphs.subgraphs.skill_execution_subgraph import build_skill_execution_subgraph
+    from src.graphchat.application.graphs.subgraphs.silent_loop_subgraph import build_silent_loop_subgraph
+    from src.graphchat.application.skills.guard_profiles import build_default_skill_profiles
+    from src.graphchat.interfaces.ui.graph_bundle import (
         build_graph_bundle,
         build_graph_entry,
         write_bundle_html,
@@ -40,20 +50,54 @@ def main() -> None:
 
     runtime = GraphChatRuntime(base_dir=root / args.data_dir)
 
+    sub_listening = build_listening_subgraph()
     sub_silent = build_silent_loop_subgraph()
     sub_retrieval = build_retrieval_subgraph(
         RetrievalDeps(tag_index=runtime.tag_index, vector_index=runtime.vector_index)
     )
     sub_board = build_board_subgraph(BoardDeps(board_store=runtime.board_store))
     sub_governance = build_governance_subgraph()
+    sub_action_parallel = build_action_parallel_subgraph(
+        ActionParallelDeps(
+            allowed_actions=set(runtime.action_registry.keys()) | {"rag"},
+            action_registry=runtime.action_registry,
+            skill_profiles=build_default_skill_profiles(runtime.action_registry),
+            idempotency_cache=runtime.idempotency_cache,
+            retrieval_subgraph=sub_retrieval,
+            board_subgraph=sub_board,
+            governance_subgraph=sub_governance,
+            plan_only=True,
+        )
+    )
+    sub_skill_execution = build_skill_execution_subgraph(
+        ActionParallelDeps(
+            allowed_actions=set(runtime.action_registry.keys()) | {"rag"},
+            action_registry=runtime.action_registry,
+            skill_profiles=build_default_skill_profiles(runtime.action_registry),
+            idempotency_cache=runtime.idempotency_cache,
+            retrieval_subgraph=sub_retrieval,
+            board_subgraph=sub_board,
+            governance_subgraph=sub_governance,
+        )
+    )
+    sub_guardrail = build_guardrail_subgraph(
+        GuardrailDeps(
+            action_registry=runtime.action_registry,
+            idempotency_cache=runtime.idempotency_cache,
+        )
+    )
 
     entries = [
         build_graph_entry("world", runtime.world_graph, GRAPH_METADATA.get("world")),
         build_graph_entry("agent", runtime.agent_graph, GRAPH_METADATA.get("agent")),
+        build_graph_entry("listening_subgraph", sub_listening, GRAPH_METADATA.get("listening_subgraph")),
         build_graph_entry("silent_loop_subgraph", sub_silent, GRAPH_METADATA.get("silent_loop_subgraph")),
         build_graph_entry("retrieval_subgraph", sub_retrieval, GRAPH_METADATA.get("retrieval_subgraph")),
+        build_graph_entry("action_parallel_subgraph", sub_action_parallel, GRAPH_METADATA.get("action_parallel_subgraph")),
+        build_graph_entry("skill_execution_subgraph", sub_skill_execution, GRAPH_METADATA.get("skill_execution_subgraph")),
         build_graph_entry("board_subgraph", sub_board, GRAPH_METADATA.get("board_subgraph")),
         build_graph_entry("governance_subgraph", sub_governance, GRAPH_METADATA.get("governance_subgraph")),
+        build_graph_entry("guardrail_subgraph", sub_guardrail, GRAPH_METADATA.get("guardrail_subgraph")),
     ]
 
     out_dir = root / args.out

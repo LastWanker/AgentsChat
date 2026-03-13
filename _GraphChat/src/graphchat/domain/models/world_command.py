@@ -14,6 +14,7 @@ WorldCommandType = Literal[
     "inject_task",
     "direct_chat",
     "force_phase",
+    "set_agent_retrieval",
     "stop_world",
 ]
 
@@ -35,4 +36,3 @@ def validate_world_command(command: dict[str, Any]) -> tuple[dict[str, Any] | No
     except ValidationError as e:
         return None, e.errors()[0]["msg"]
     return parsed.model_dump(), None
-

@@ -50,7 +50,11 @@ def build_retrieval_subgraph(deps: RetrievalDeps):
     def choose_channel_node(state: AgentState) -> AgentState:
         action = str(state.get("planned_action", ""))
         requested = _default_channel_plan(action)
-        enabled = deps.enabled_channels or set(channels.keys())
+        state_enabled = state.get("enabled_retrieval_channels", [])
+        if isinstance(state_enabled, list) and state_enabled:
+            enabled = {str(item) for item in state_enabled if str(item).strip()}
+        else:
+            enabled = deps.enabled_channels or set(channels.keys())
         selected = [ch for ch in requested if ch in enabled and ch in channels]
         if not selected and "world_history" in channels:
             selected = ["world_history"]

@@ -24,6 +24,11 @@ def listening_node(state: AgentState) -> AgentState:
 
 
 def decide_wake_node(state: AgentState) -> AgentState:
+    phase_override = str(state.get("phase_override", "")).strip().lower()
+    if phase_override in {"force_plan", "force_emit"}:
+        return {"should_wake": True}
+    if str(state.get("agent_status", "")).lower() == "sleeping":
+        return {"should_wake": False}
     return {"should_wake": bool(state.get("should_wake", False))}
 
 
@@ -103,6 +108,33 @@ def retrieval_router(state: AgentState) -> str:
     return "retrieval_subgraph" if state.get("needs_retrieval") else "citation_guard"
 
 
+def governance_router(state: AgentState) -> str:
+    action = str(state.get("planned_action", "")).strip()
+    return "governance_subgraph" if action in {"vote_decision", "dissolve_group"} else "guardrail_subgraph"
+
+
+def lifecycle_gate_node(state: AgentState) -> AgentState:
+    ttl = int(state.get("global_ttl", 0))
+    threshold = int(state.get("lastlife_threshold", 3))
+    if ttl <= 0:
+        return {"agent_status": "sleeping"}
+    if ttl <= threshold:
+        return {"agent_status": "lastlife"}
+    if state.get("task_done", False):
+        return {"agent_status": "idle"}
+    return {"agent_status": "working"}
+
+
+def lifecycle_router(state: AgentState) -> str:
+    if str(state.get("agent_status", "")).lower() == "sleeping":
+        return "__end__"
+    if not bool(state.get("enable_internal_loop", False)):
+        return "__end__"
+    if bool(state.get("task_done", False)):
+        return "listening_subgraph"
+    return "decide_wake"
+
+
 def policy_gate_node(state: AgentState) -> AgentState:
     if not state.get("approval_required"):
         return {}
@@ -135,20 +167,43 @@ def emit_event_node(state: AgentState, deps: AgentNodeDeps) -> AgentState:
     if key:
         deps.idempotency_cache.add(key)
 
-    action = state.get("planned_action", "listen_only")
-    spec = deps.action_registry.get(action)
-    event = Event(
-        session_id=state["session_id"],
-        world_scope=state.get("action_payload", {}).get("world_scope", "group:main"),
-        actor_id=state["agent_id"],
-        action_id=action,
-        action_version=spec.version if spec else "1.0.0",
-        payload=state.get("action_payload", {}),
-        references=[
-            {"event_id": event_id, "role": "support", "score": 0.5}
-            for event_id in state.get("support_references", [])
-        ],
-        focus_reference=state.get("focus_reference"),
-        trace={"node": "emit_event", "idempotency_key": key},
-    )
-    return {"emitted_events": [event.to_dict()]}
+    actions = [item for item in state.get("action_results", []) if isinstance(item, dict)]
+    if not actions:
+        actions = [
+            {
+                "action_id": state.get("planned_action", "listen_only"),
+                "payload": state.get("action_payload", {}),
+                "step_index": 1,
+            }
+        ]
+
+    emitted: list[dict] = []
+    for idx, item in enumerate(actions):
+        action = str(item.get("action_id", "listen_only") or "listen_only")
+        payload = item.get("payload", {})
+        if not isinstance(payload, dict):
+            payload = {}
+        spec = deps.action_registry.get(action)
+        event = Event(
+            session_id=state["session_id"],
+            world_scope=payload.get("world_scope", "group:main"),
+            actor_id=state["agent_id"],
+            action_id=action,
+            action_version=spec.version if spec else "1.0.0",
+            payload=payload,
+            references=[
+                {"event_id": event_id, "role": "support", "score": 0.5}
+                for event_id in state.get("support_references", [])
+            ],
+            focus_reference=state.get("focus_reference"),
+            trace={
+                "node": "emit_event",
+                "idempotency_key": key,
+                "batch_index": idx,
+                "step_index": item.get("step_index"),
+                "retrieval_channel": state.get("retrieval_channel"),
+                "retrieval_channels": list(state.get("retrieval_channels", [])),
+            },
+        )
+        emitted.append(event.to_dict())
+    return {"emitted_events": emitted}

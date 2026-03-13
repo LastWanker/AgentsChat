@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
@@ -11,6 +12,7 @@ MAX_ACTION_STEPS = 6
 
 # V2 默认动作优先级（值越小优先级越高）。LLM 若给出 step_index，会覆盖该默认排序。
 DEFAULT_ACTION_PRIORITY: dict[str, int] = {
+    "rag": 5,
     "maintain_board": 10,
     "board_item_upserted": 10,
     "board_item_deleted": 10,
@@ -26,11 +28,14 @@ DEFAULT_ACTION_PRIORITY: dict[str, int] = {
 
 
 class ActionIntent(BaseModel):
+    step_id: str | None = None
     action_id: str = Field(min_length=1)
     plan_text: str = Field(default="")
     payload: dict[str, Any] = Field(default_factory=dict)
     target_scope: str = Field(default="group:main")
     target_agents: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+    dispatch: Literal["auto", "serial", "parallel"] = "auto"
     priority: int = Field(default=100, ge=1, le=999)
     can_skip: bool = False
     step_index: int | None = Field(default=None, ge=1, le=MAX_ACTION_STEPS)
@@ -46,6 +51,25 @@ class ActionIntent(BaseModel):
     @classmethod
     def normalize_target_agents(cls, v: list[str]) -> list[str]:
         out = [str(item).strip() for item in v if str(item).strip()]
+        return out
+
+    @field_validator("step_id")
+    @classmethod
+    def normalize_step_id(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        text = str(v).strip()
+        return text or None
+
+    @field_validator("depends_on")
+    @classmethod
+    def normalize_depends_on(cls, v: list[str]) -> list[str]:
+        out: list[str] = []
+        for item in v:
+            dep = str(item).strip()
+            if not dep or dep in out:
+                continue
+            out.append(dep)
         return out
 
 
@@ -85,5 +109,20 @@ def normalize_actions_v2(
             x.priority,
         )
     )
-    return [item.model_dump() for item in parsed[:MAX_ACTION_STEPS]]
+    normalized: list[dict[str, Any]] = []
+    for idx, item in enumerate(parsed[:MAX_ACTION_STEPS], start=1):
+        row = item.model_dump()
+        row["step_id"] = row.get("step_id") or f"s{idx}"
+        normalized.append(row)
 
+    valid_ids = {str(item.get("step_id")) for item in normalized}
+    previous_step_id: str | None = None
+    for item in normalized:
+        deps = [dep for dep in list(item.get("depends_on", [])) if dep in valid_ids and dep != item.get("step_id")]
+        dispatch = str(item.get("dispatch", "auto")).strip().lower() or "auto"
+        if not deps and previous_step_id and dispatch != "parallel":
+            deps = [previous_step_id]
+        item["depends_on"] = deps
+        item["dispatch"] = dispatch
+        previous_step_id = str(item.get("step_id"))
+    return normalized

@@ -191,4 +191,7 @@ cython_debug/
 /test/data
 /config_data
 /test/data/sessions
+/_GraphChat/tmp/
+/_GraphChat/data/
+/_GraphChat/_GraphChat/
 

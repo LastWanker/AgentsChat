@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GraphChat 内部控制台</title>
+  <style>
+    :root {
+      --bg-1: #f8f9f3;
+      --bg-2: #dce8d8;
+      --surface: #ffffffd9;
+      --ink: #1f2a1f;
+      --muted: #4f5b4f;
+      --line: #9eb39f;
+      --accent: #195f3d;
+      --accent-2: #1f7a57;
+      --danger: #a32a2a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Microsoft YaHei UI", "Noto Sans SC", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top right, var(--bg-2), var(--bg-1) 58%);
+    }
+
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .title {
+      grid-column: 1 / -1;
+      background: linear-gradient(120deg, #fefefe, #eef6ee);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .title h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0.2px;
+    }
+
+    .title p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(40, 63, 44, 0.08);
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .line {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 8px;
+    }
+
+    label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    input, textarea, select, button {
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      padding: 9px 10px;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 88px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    .btnrow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    button {
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      border: 0;
+      transition: transform 0.12s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button.ghost {
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    button.warn {
+      background: linear-gradient(135deg, #8e2b2b, var(--danger));
+    }
+
+    pre {
+      margin: 8px 0 0;
+      min-height: 100px;
+      max-height: 360px;
+      overflow: auto;
+      border-radius: 8px;
+      border: 1px solid #cfd9cf;
+      padding: 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      background: #f8fbf8;
+      font-family: Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #eventLog {
+      min-height: 160px;
+      max-height: 420px;
+    }
+
+    #approvalsList .item {
+      border: 1px solid #cfd9cf;
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: #f9fcf9;
+    }
+
+    #approvalsList .meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    @media (max-width: 1020px) {
+      .wrap {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="title">
+      <h1 id="titleMain">GraphChat 内部控制台</h1>
+      <p id="titleSub">用于内部消息交互、世界命令、审批处理、直聊和可观测信息查看。</p>
+    </section>
+
+    <section class="card">
+      <h2 id="hConnection">连接设置</h2>
+      <div class="grid2">
+        <div class="line">
+          <label id="lblApiBase">API 基础地址</label>
+          <input id="apiBase" value="" placeholder="" />
+        </div>
+        <div class="line">
+          <label id="lblApiToken">API Token（可选）</label>
+          <input id="apiToken" value="" placeholder="" />
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="line">
+          <label id="lblSessionId">会话 ID</label>
+          <input id="sessionId" value="internal_demo" />
+        </div>
+        <div class="line">
+          <label id="lblWorldScope">World Scope</label>
+          <input id="worldScope" value="group:main" />
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="line">
+          <label id="lblLanguage">界面语言</label>
+          <select id="uiLang">
+            <option value="zh">中文（默认）</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="line">
+          <label id="lblEmpty"></label>
+          <div></div>
+        </div>
+      </div>
+      <div class="btnrow">
+        <button class="ghost" id="btnHealth"></button>
+        <button class="ghost" id="btnLoadEvents"></button>
+      </div>
+      <pre id="metaLog"></pre>
+    </section>
+
+    <section class="card">
+      <h2 id="hMessaging">消息交互</h2>
+      <div class="line">
+        <label id="lblMessageText">消息内容</label>
+        <textarea id="messageText"></textarea>
+      </div>
+      <div class="btnrow">
+        <button id="btnSend"></button>
+        <button id="btnStream"></button>
+        <button class="warn" id="btnStopStream"></button>
+      </div>
+      <pre id="eventLog"></pre>
+    </section>
+
+    <section class="card">
+      <h2 id="hWorldCommands">World Commands</h2>
+      <div class="line">
+        <label id="lblCommandsJson">命令 JSON</label>
+        <textarea id="commandsJson">[
+  {
+    "type": "inject_task",
+    "scope": "group:main",
+    "payload": {"text": "请讨论并给出结论", "urgency": "normal"}
+  }
+]</textarea>
+      </div>
+      <div class="btnrow">
+        <button id="btnRunCommands"></button>
+      </div>
+      <pre id="commandLog"></pre>
+    </section>
+
+    <section class="card">
+      <h2 id="hApprovals">审批</h2>
+      <div class="btnrow">
+        <button class="ghost" id="btnRefreshApprovals"></button>
+      </div>
+      <div id="approvalsList"></div>
+      <pre id="approvalLog"></pre>
+    </section>
+
+    <section class="card">
+      <h2 id="hDirectChat">Direct Chat</h2>
+      <div class="grid2">
+        <div class="line">
+          <label id="lblAgentId">Agent ID</label>
+          <input id="directAgentId" value="agent_1" />
+        </div>
+        <div class="line">
+          <label id="lblActorId">发起者 ID</label>
+          <input id="directActorId" value="user" />
+        </div>
+      </div>
+      <div class="line">
+        <label id="lblDirectText">内容</label>
+        <textarea id="directText"></textarea>
+      </div>
+      <div class="btnrow">
+        <button id="btnDirectChat"></button>
+      </div>
+      <pre id="directLog"></pre>
+    </section>
+
+    <section class="card">
+      <h2 id="hObservability">可观测</h2>
+      <div class="btnrow">
+        <button class="ghost" id="btnObservability"></button>
+      </div>
+      <pre id="obsLog"></pre>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      let streamCtrl = null;
+
+      const el = (id) => document.getElementById(id);
+      const state = {
+        apiBase: "",
+        apiToken: "",
+        lang: "zh",
+      };
+
+      const I18N = {
+        zh: {
+          docTitle: "GraphChat 内部控制台",
+          titleMain: "GraphChat 内部控制台",
+          titleSub: "用于内部消息交互、世界命令、审批处理、直聊和可观测信息查看。",
+          hConnection: "连接设置",
+          lblApiBase: "API 基础地址",
+          apiBasePh: "留空表示与当前页面同源",
+          lblApiToken: "API Token（可选）",
+          apiTokenPh: "x-api-token 或 Bearer token",
+          lblSessionId: "会话 ID",
+          lblWorldScope: "World Scope",
+          lblLanguage: "界面语言",
+          hMessaging: "消息交互",
+          lblMessageText: "消息内容",
+          defaultMessage: "你好，请先汇报当前状态",
+          btnHealth: "检查健康状态",
+          btnLoadEvents: "加载事件（轮询回退）",
+          btnSend: "发送消息",
+          btnStream: "流式消息（SSE）",
+          btnStopStream: "停止流式",
+          hWorldCommands: "World Commands",
+          lblCommandsJson: "命令 JSON",
+          btnRunCommands: "执行 world commands",
+          hApprovals: "审批",
+          btnRefreshApprovals: "刷新审批列表",
+          hDirectChat: "Direct Chat",
+          lblAgentId: "Agent ID",
+          lblActorId: "发起者 ID",
+          lblDirectText: "内容",
+          defaultDirectText: "请一句话报告你当前在做什么",
+          btnDirectChat: "发送直聊",
+          hObservability: "可观测",
+          btnObservability: "刷新可观测快照",
+          streamStopped: "流式已停止",
+          streamCompleted: "流式完成",
+          streamFailed: "流式失败",
+          pendingApprovals: "待审批数量",
+          noPendingApprovals: "当前没有待审批项",
+          approve: "通过",
+          reject: "拒绝",
+          handledAt: "处理时间",
+          consoleReady: "控制台已就绪",
+        },
+        en: {
+          docTitle: "GraphChat Internal Console",
+          titleMain: "GraphChat Internal Console",
+          titleSub: "Internal panel for messaging, world commands, approvals, direct chat, and observability.",
+          hConnection: "Connection",
+          lblApiBase: "API Base URL",
+          apiBasePh: "empty means same origin",
+          lblApiToken: "API Token (optional)",
+          apiTokenPh: "x-api-token / bearer token",
+          lblSessionId: "Session ID",
+          lblWorldScope: "World Scope",
+          lblLanguage: "Language",
+          hMessaging: "Messaging",
+          lblMessageText: "Text",
+          defaultMessage: "hello, please report current status first",
+          btnHealth: "Check health/ready",
+          btnLoadEvents: "Load events (poll fallback)",
+          btnSend: "Send message",
+          btnStream: "Stream message (SSE)",
+          btnStopStream: "Stop stream",
+          hWorldCommands: "World Commands",
+          lblCommandsJson: "Commands JSON",
+          btnRunCommands: "Run world commands",
+          hApprovals: "Approvals",
+          btnRefreshApprovals: "Refresh approvals",
+          hDirectChat: "Direct Chat",
+          lblAgentId: "Agent ID",
+          lblActorId: "Actor ID",
+          lblDirectText: "Text",
+          defaultDirectText: "please report your current status in one sentence",
+          btnDirectChat: "Send direct chat",
+          hObservability: "Observability",
+          btnObservability: "Refresh observability",
+          streamStopped: "stream stopped",
+          streamCompleted: "stream completed",
+          streamFailed: "stream failed",
+          pendingApprovals: "pending approvals",
+          noPendingApprovals: "No pending approvals",
+          approve: "Approve",
+          reject: "Reject",
+          handledAt: "handled at",
+          consoleReady: "console ready",
+        },
+      };
+
+      function t(key) {
+        const langPack = I18N[state.lang] || I18N.zh;
+        return langPack[key] || I18N.zh[key] || key;
+      }
+
+      function now() {
+        return new Date().toISOString().replace("T", " ").slice(0, 19);
+      }
+
+      function appendLog(target, value) {
+        const node = el(target);
+        const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+        node.textContent += `[${now()}] ${text}\n`;
+        node.scrollTop = node.scrollHeight;
+      }
+
+      function clearLog(target) {
+        el(target).textContent = "";
+      }
+
+      function sessionId() {
+        return el("sessionId").value.trim() || "internal_demo";
+      }
+
+      function scope() {
+        return el("worldScope").value.trim() || "group:main";
+      }
+
+      function applyLanguage(lang) {
+        state.lang = lang === "en" ? "en" : "zh";
+        document.documentElement.lang = state.lang === "zh" ? "zh-CN" : "en";
+        document.title = t("docTitle");
+        el("titleMain").textContent = t("titleMain");
+        el("titleSub").textContent = t("titleSub");
+        el("hConnection").textContent = t("hConnection");
+        el("lblApiBase").textContent = t("lblApiBase");
+        el("apiBase").placeholder = t("apiBasePh");
+        el("lblApiToken").textContent = t("lblApiToken");
+        el("apiToken").placeholder = t("apiTokenPh");
+        el("lblSessionId").textContent = t("lblSessionId");
+        el("lblWorldScope").textContent = t("lblWorldScope");
+        el("lblLanguage").textContent = t("lblLanguage");
+        el("hMessaging").textContent = t("hMessaging");
+        el("lblMessageText").textContent = t("lblMessageText");
+        el("btnHealth").textContent = t("btnHealth");
+        el("btnLoadEvents").textContent = t("btnLoadEvents");
+        el("btnSend").textContent = t("btnSend");
+        el("btnStream").textContent = t("btnStream");
+        el("btnStopStream").textContent = t("btnStopStream");
+        el("hWorldCommands").textContent = t("hWorldCommands");
+        el("lblCommandsJson").textContent = t("lblCommandsJson");
+        el("btnRunCommands").textContent = t("btnRunCommands");
+        el("hApprovals").textContent = t("hApprovals");
+        el("btnRefreshApprovals").textContent = t("btnRefreshApprovals");
+        el("hDirectChat").textContent = t("hDirectChat");
+        el("lblAgentId").textContent = t("lblAgentId");
+        el("lblActorId").textContent = t("lblActorId");
+        el("lblDirectText").textContent = t("lblDirectText");
+        el("btnDirectChat").textContent = t("btnDirectChat");
+        el("hObservability").textContent = t("hObservability");
+        el("btnObservability").textContent = t("btnObservability");
+        if (!el("messageText").value.trim()) {
+          el("messageText").value = t("defaultMessage");
+        }
+        if (!el("directText").value.trim()) {
+          el("directText").value = t("defaultDirectText");
+        }
+      }
+
+      function readConnection() {
+        state.apiBase = el("apiBase").value.trim();
+        state.apiToken = el("apiToken").value.trim();
+        state.lang = el("uiLang").value === "en" ? "en" : "zh";
+        localStorage.setItem("graphchat_internal_console", JSON.stringify({
+          apiBase: state.apiBase,
+          apiToken: state.apiToken,
+          sessionId: sessionId(),
+          worldScope: scope(),
+          lang: state.lang,
+        }));
+      }
+
+      function loadConnection() {
+        try {
+          const raw = localStorage.getItem("graphchat_internal_console");
+          if (!raw) return;
+          const saved = JSON.parse(raw);
+          if (saved.apiBase !== undefined) el("apiBase").value = String(saved.apiBase || "");
+          if (saved.apiToken !== undefined) el("apiToken").value = String(saved.apiToken || "");
+          if (saved.sessionId) el("sessionId").value = String(saved.sessionId);
+          if (saved.worldScope) el("worldScope").value = String(saved.worldScope);
+          if (saved.lang) el("uiLang").value = String(saved.lang) === "en" ? "en" : "zh";
+        } catch (_) {
+          // ignore bad local state
+        }
+      }
+
+      function base(path) {
+        if (!state.apiBase) return path;
+        return `${state.apiBase.replace(/\/$/, "")}${path}`;
+      }
+
+      function authHeaders(extra = {}) {
+        const out = { ...extra };
+        if (state.apiToken) {
+          out["x-api-token"] = state.apiToken;
+          out["authorization"] = `Bearer ${state.apiToken}`;
+        }
+        return out;
+      }
+
+      async function req(path, opts = {}) {
+        readConnection();
+        const res = await fetch(base(path), {
+          ...opts,
+          headers: authHeaders(opts.headers || {}),
+        });
+        let body = null;
+        try {
+          body = await res.json();
+        } catch (_) {
+          body = { raw: await res.text() };
+        }
+        if (!res.ok) {
+          throw new Error(JSON.stringify(body));
+        }
+        return body;
+      }
+
+      async function healthCheck() {
+        clearLog("metaLog");
+        try {
+          const health = await req("/healthz");
+          appendLog("metaLog", health);
+          const ready = await req("/readyz");
+          appendLog("metaLog", ready);
+        } catch (err) {
+          appendLog("metaLog", String(err));
+        }
+      }
+
+      async function sendMessage() {
+        clearLog("eventLog");
+        try {
+          const payload = await req(`/v1/sessions/${encodeURIComponent(sessionId())}/messages`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              text: el("messageText").value,
+              world_scope: scope(),
+              actor_id: "user",
+            }),
+          });
+          appendLog("eventLog", payload);
+        } catch (err) {
+          appendLog("eventLog", String(err));
+        }
+      }
+
+      function stopStream() {
+        if (streamCtrl) {
+          streamCtrl.abort();
+          streamCtrl = null;
+          appendLog("eventLog", t("streamStopped"));
+        }
+      }
+
+      async function streamMessage() {
+        stopStream();
+        clearLog("eventLog");
+        readConnection();
+        streamCtrl = new AbortController();
+        try {
+          const url = new URL(base(`/v1/sessions/${encodeURIComponent(sessionId())}/stream`), window.location.origin);
+          url.searchParams.set("text", el("messageText").value);
+          url.searchParams.set("world_scope", scope());
+          url.searchParams.set("actor_id", "user");
+          const res = await fetch(url.toString(), {
+            method: "GET",
+            signal: streamCtrl.signal,
+            headers: authHeaders(),
+          });
+          if (!res.ok || !res.body) {
+            throw new Error(`${t("streamFailed")}: ${res.status}`);
+          }
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder("utf-8");
+          let buffer = "";
+          while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            buffer += decoder.decode(chunk.value, { stream: true });
+            const segments = buffer.split("\n\n");
+            buffer = segments.pop() || "";
+            for (const seg of segments) {
+              if (!seg.trim()) continue;
+              appendLog("eventLog", seg);
+            }
+          }
+          appendLog("eventLog", t("streamCompleted"));
+        } catch (err) {
+          appendLog("eventLog", String(err));
+        } finally {
+          streamCtrl = null;
+        }
+      }
+
+      async function runCommands() {
+        clearLog("commandLog");
+        try {
+          const commands = JSON.parse(el("commandsJson").value);
+          const payload = await req(`/v1/sessions/${encodeURIComponent(sessionId())}/world-commands`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              commands: Array.isArray(commands) ? commands : [commands],
+              created_by: "internal_console",
+            }),
+          });
+          appendLog("commandLog", payload);
+        } catch (err) {
+          appendLog("commandLog", String(err));
+        }
+      }
+
+      async function refreshApprovals() {
+        clearLog("approvalLog");
+        const box = el("approvalsList");
+        box.innerHTML = "";
+        try {
+          const data = await req(`/v1/approvals?session_id=${encodeURIComponent(sessionId())}&status=pending`);
+          appendLog("approvalLog", `${t("pendingApprovals")}: ${data.count}`);
+          for (const item of (data.items || [])) {
+            const row = document.createElement("div");
+            row.className = "item";
+            const meta = document.createElement("div");
+            meta.className = "meta";
+            meta.textContent = `${item.request_id || "unknown"} | ${item.agent_id || "?"} | ${item.status || "?"}`;
+            row.appendChild(meta);
+
+            const body = document.createElement("pre");
+            body.textContent = JSON.stringify(item.interrupt_payload || item, null, 2);
+            row.appendChild(body);
+
+            const controls = document.createElement("div");
+            controls.className = "btnrow";
+            const approve = document.createElement("button");
+            approve.textContent = t("approve");
+            approve.onclick = () => resolveApproval(item.request_id, "approved");
+            const reject = document.createElement("button");
+            reject.className = "warn";
+            reject.textContent = t("reject");
+            reject.onclick = () => resolveApproval(item.request_id, "rejected");
+            controls.appendChild(approve);
+            controls.appendChild(reject);
+            row.appendChild(controls);
+            box.appendChild(row);
+          }
+          if (!data.items || data.items.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "meta";
+            empty.textContent = t("noPendingApprovals");
+            box.appendChild(empty);
+          }
+        } catch (err) {
+          appendLog("approvalLog", String(err));
+        }
+      }
+
+      async function resolveApproval(requestId, decision) {
+        try {
+          const out = await req(`/v1/approvals/${encodeURIComponent(requestId)}/resolve`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              decision,
+              reviewer: "internal_console",
+              note: `${t("handledAt")} ${now()}`,
+            }),
+          });
+          appendLog("approvalLog", out);
+          await refreshApprovals();
+        } catch (err) {
+          appendLog("approvalLog", String(err));
+        }
+      }
+
+      async function directChat() {
+        clearLog("directLog");
+        try {
+          const out = await req(`/v1/sessions/${encodeURIComponent(sessionId())}/direct-chat`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              agent_id: el("directAgentId").value.trim(),
+              actor_id: el("directActorId").value.trim(),
+              text: el("directText").value,
+              scope: scope(),
+            }),
+          });
+          appendLog("directLog", out);
+        } catch (err) {
+          appendLog("directLog", String(err));
+        }
+      }
+
+      async function observability() {
+        clearLog("obsLog");
+        try {
+          const out = await req(`/v1/sessions/${encodeURIComponent(sessionId())}/observability`);
+          appendLog("obsLog", out);
+        } catch (err) {
+          appendLog("obsLog", String(err));
+        }
+      }
+
+      async function loadEvents() {
+        clearLog("eventLog");
+        try {
+          const out = await req(`/v1/sessions/${encodeURIComponent(sessionId())}/events?limit=120`);
+          appendLog("eventLog", out);
+        } catch (err) {
+          appendLog("eventLog", String(err));
+        }
+      }
+
+      loadConnection();
+      applyLanguage(el("uiLang").value);
+      el("uiLang").addEventListener("change", () => {
+        applyLanguage(el("uiLang").value);
+        readConnection();
+      });
+      el("btnHealth").onclick = healthCheck;
+      el("btnSend").onclick = sendMessage;
+      el("btnStream").onclick = streamMessage;
+      el("btnStopStream").onclick = stopStream;
+      el("btnRunCommands").onclick = runCommands;
+      el("btnRefreshApprovals").onclick = refreshApprovals;
+      el("btnDirectChat").onclick = directChat;
+      el("btnObservability").onclick = observability;
+      el("btnLoadEvents").onclick = loadEvents;
+      appendLog("metaLog", t("consoleReady"));
+    })();
+  </script>
+</body>
+</html>

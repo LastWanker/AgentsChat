@@ -188,8 +188,10 @@ class LangChainStructuredModelProvider:
                     f"可用动作集合：{allowed}。"
                     "必须输出 JSON 结构，字段为 reasoning_summary、task_done、actions。"
                     "actions 是步骤列表，最多 6 步，允许重复动作。"
-                    "每步必须包含 action_id、plan_text、payload、target_scope、target_agents、priority、can_skip，可选 step_index。"
-                    "默认优先级是 board>speak>governance，但如果给了 step_index，以 step_index 顺序为准。"
+                    "每步必须包含 action_id、plan_text、payload、target_scope、target_agents、priority、can_skip。"
+                    "建议同时给出 step_id、depends_on、dispatch(auto/serial/parallel)、step_index。"
+                    "rag 也是 skill，可作为独立 action_id 出现。"
+                    "默认优先级是 rag>board>speak>governance，但若给了 depends_on/step_index，以计划为准。"
                     "payload 至少要包含 world_scope。"
                 )
             ),

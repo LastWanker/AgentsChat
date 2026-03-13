@@ -16,12 +16,23 @@ def build_silent_loop_subgraph():
 
     def backoff_control_node(state: AgentState) -> AgentState:
         rounds = int(state.get("silent_rounds", 0)) + 1
-        return {"silent_rounds": rounds}
+        ttl = int(state.get("global_ttl", state.get("ttl_initial", 15)))
+        next_ttl = ttl - 1 if ttl > 0 else 0
+        return {"silent_rounds": rounds, "global_ttl": next_ttl}
 
     def wake_signal_filter_node(state: AgentState) -> AgentState:
+        if int(state.get("global_ttl", 0)) <= 0:
+            return {"should_wake": False, "agent_status": "sleeping"}
         max_rounds = int(state.get("max_silent_rounds", 3))
-        should_wake = bool(state.get("wake_mention", False)) or int(state.get("silent_rounds", 0)) >= max_rounds
-        return {"should_wake": should_wake}
+        force_phase = str(state.get("phase_override") or "").strip().lower()
+        should_wake = (
+            bool(state.get("wake_mention", False))
+            or force_phase in {"force_plan", "plan_actions", "urgent"}
+            or int(state.get("silent_rounds", 0)) >= max_rounds
+        )
+        if should_wake:
+            return {"should_wake": True, "agent_status": "working"}
+        return {"should_wake": False, "agent_status": "idle"}
 
     graph.add_node("poll_new_events", poll_new_events_node)
     graph.add_node("backoff_control", backoff_control_node)
@@ -31,4 +42,3 @@ def build_silent_loop_subgraph():
     graph.add_edge("backoff_control", "wake_signal_filter")
     graph.add_edge("wake_signal_filter", END)
     return graph.compile()
-
