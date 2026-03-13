@@ -210,3 +210,19 @@ Desktop.ini
 .env.*
 !.env.example
 
+# Private doc policy: keep local docs out of git, keep README files only
+/docs/**
+!/docs/
+!/docs/**/
+!/docs/**/README.md
+
+/SystemAnalysis/**
+!/SystemAnalysis/
+!/SystemAnalysis/**/
+!/SystemAnalysis/**/README.md
+
+/_GraphChat/docs/**
+!/_GraphChat/docs/
+!/_GraphChat/docs/**/
+!/_GraphChat/docs/**/README.md
+

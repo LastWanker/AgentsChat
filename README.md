@@ -1,58 +1,25 @@
-# AgentsChat（事件驱动多智能体实验场）
+# AgentsChat（外层实验仓库）
 
-AgentsChat 是一个以“事件-意向闭环”为核心的多智能体实验场，目标是搭建一个可记录协作过程、可解释贡献、支持治理的协作平台：Agent 只提交意向，由规则裁决后转为事件，最终形成可追溯的事件图谱，用于贡献归因与实验分析。
+这个仓库的主项目是 [`_GraphChat/`](./_GraphChat)。
 
-## 项目定位
+根目录当前用于实验、过渡代码和历史材料整理，不作为长期稳定入口。
 
-- **研究与实验平台**：强调可控性、可观测性与可扩展性。
-- **协作过程可追溯**：以事件时间线与引用关系支撑分析。
-- **治理与扩展友好**：低耦合度，面向产物，调度方法可替换。
+## 仓库定位
 
-## 核心理念
+- 主项目：`_GraphChat/`（持续演进、优先维护）
+- 根目录：实验区/样例区（可能随时调整）
 
-- **意向与事实分离**：意向只表达“想做什么”，事件才是“已经发生的事”。
-- **规则裁决在先**：意向需经解释器校验与约束后才能落地。
-- **事件是唯一真相**：所有协作与引用都以事件为基准。
+## 建议入口
 
-## 系统流程（高层视图）
+请优先阅读并使用：
 
-1. Controller 选择合适的 Agent 生成 Intention。
-2. Interpreter 按规则裁决意向。
-3. Router 将通过的意向转换为 Event。
-4. World 记录并广播事件，进入下一轮循环。
+- [`_GraphChat/README.md`](./_GraphChat/README.md)
 
-## Agent 生成结构（起草 → 索引 → 成文）
+## 文档上传策略
 
-为提高生成质量，系统在设计上采用三段式生成结构：
+当前策略是：
 
-1. **起草阶段**：输出意向草稿。
-2. **索引阶段**：确定需要回忆或检索的事件。
-3. **成文阶段**：补齐引用与权重，形成最终意向。
+- 公开仓库仅保留必要 `README`
+- 其他过程文档、本地分析文档不再上传
 
-## 组件构成
-
-- **Agent/Controller**：负责身份、记忆与意向生成入口。
-- **Intention Proposer**：支持规则模式与 LLM 模式。
-- **Intent Interpreter**：基于策略校验与约束意向。
-- **Router/World**：将意向落地为事件并广播。
-- **Scheduler**：控制发言节奏与调度策略。
-- **Event Store/Query**：提供事件持久化与检索能力。
-
-## 研究方向
-
-- **检索能力增强**：从时间窗检索扩展到主题与语义检索。
-- **生成稳定性提升**：引入输出校验与修复机制。
-- **贡献归因机制深化**：探索权重评估的规则化与后置评估。
-
-## 更多资料
-
-完整的思路与分析过程，请从 `SystemAnalysis/` 目录开始，包含系统模块分析、数据流分析、权重合理性分析与阶段性体检报告。
-
-如需运行示例，可参考 `main.py` 与 `test/` 目录中的脚本。需要一个LLM API
-
-## Runtime Notes (2026-03-09)
-
-- Preferred entrypoint: `python -m agents_chat.app.cli`
-- Tests location: `tests/` (`unit`, `integration`, `e2e`)
-- Examples location: `examples/`
-- Default workflow engine: `langgraph` (auto-fallback to `legacy` when `langgraph` package is missing)
+如果历史提交里已经包含敏感文档，需要额外执行历史清理（`git filter-repo` + `force push`）。
